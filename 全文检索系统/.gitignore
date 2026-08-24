@@ -1,0 +1,24 @@
+# 运行时/用户数据（含账号、聊天记录、资料库索引，切勿提交）
+data/
+instances.json
+_users.json
+_settings.json
+_secrets.json
+_secret.key
+.pid_*
+
+# 本地模型缓存（首次运行自动从 HuggingFace 下载）
+models/
+models--*/
+
+# 构建产物与日志
+build/
+dist/
+output/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.log
+
+# 基准测试等本地临时产物
+bench_timing.json
