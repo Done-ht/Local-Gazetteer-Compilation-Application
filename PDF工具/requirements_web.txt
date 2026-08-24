@@ -1,0 +1,2 @@
+# 网页版依赖（桌面版原有依赖 PyMuPDF / python-docx / lxml 仍需保留）
+Flask>=3.0

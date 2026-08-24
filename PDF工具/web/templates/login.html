@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF 工具 - 登录</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+  <div class="login-wrap">
+    <div class="login-card">
+      <div class="login-head">
+        <span class="logo">PDF</span>
+        <h1>PDF 工具</h1>
+      </div>
+      <p class="login-sub" id="loginSub">登录后使用全部功能</p>
+
+      <form id="authForm" autocomplete="off">
+        <div class="field">
+          <label for="username">用户名</label>
+          <input type="text" id="username" name="username" required
+                 placeholder="字母/数字/下划线/中文" autocomplete="username">
+        </div>
+        <div class="field">
+          <label for="password">密码</label>
+          <input type="password" id="password" name="password" required
+                 placeholder="至少 6 位" autocomplete="current-password">
+        </div>
+        <div class="field" id="confirm-field" hidden>
+          <label for="password2">确认密码</label>
+          <input type="password" id="password2" name="password2"
+                 placeholder="再输入一次" autocomplete="new-password">
+        </div>
+        <div class="login-error" id="loginError" hidden></div>
+        <button type="submit" class="btn btn-primary btn-block" id="submitBtn">登录</button>
+      </form>
+
+      <div class="login-switch">
+        <span id="switchText">没有账号？</span>
+        <a href="#" id="switchBtn">注册新账号</a>
+      </div>
+      <p class="login-hint">账号与"biaoshifu"应用通用</p>
+    </div>
+  </div>
+
+  <script>
+    "use strict";
+    const form = document.getElementById("authForm");
+    const errBox = document.getElementById("loginError");
+    const submitBtn = document.getElementById("submitBtn");
+    const switchBtn = document.getElementById("switchBtn");
+    const switchText = document.getElementById("switchText");
+    const loginSub = document.getElementById("loginSub");
+    const confirmField = document.getElementById("confirm-field");
+    let mode = "login"; // login | register
+
+    function showError(msg) {
+      errBox.textContent = msg;
+      errBox.hidden = false;
+    }
+    function clearError() { errBox.hidden = true; }
+
+    function switchMode(m) {
+      mode = m;
+      clearError();
+      if (m === "register") {
+        loginSub.textContent = "注册新账号（首个用户自动成为管理员）";
+        submitBtn.textContent = "注册";
+        switchText.textContent = "已有账号？";
+        switchBtn.textContent = "返回登录";
+        confirmField.hidden = false;
+        document.getElementById("password2").required = true;
+      } else {
+        loginSub.textContent = "登录后使用全部功能";
+        submitBtn.textContent = "登录";
+        switchText.textContent = "没有账号？";
+        switchBtn.textContent = "注册新账号";
+        confirmField.hidden = true;
+        document.getElementById("password2").required = false;
+      }
+    }
+    switchBtn.onclick = (e) => { e.preventDefault(); switchMode(mode === "login" ? "register" : "login"); };
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      clearError();
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      if (!username || !password) { showError("请输入用户名和密码"); return; }
+      if (mode === "register") {
+        const p2 = document.getElementById("password2").value;
+        if (password.length < 6) { showError("密码至少 6 位"); return; }
+        if (password !== p2) { showError("两次密码不一致"); return; }
+      }
+      submitBtn.disabled = true;
+      submitBtn.textContent = mode === "login" ? "登录中…" : "注册中…";
+      try {
+        const url = mode === "login" ? "/api/auth/login" : "/api/auth/register";
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+        });
+        const d = await r.json();
+        if (!r.ok) { showError(d.error || "操作失败"); return; }
+        // 登录/注册成功，跳首页
+        window.location.href = "/";
+      } catch (err) {
+        showError("网络错误：" + err.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = mode === "login" ? "登录" : "注册";
+      }
+    });
+  </script>
+</body>
+</html>

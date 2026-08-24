@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PDF 工具 - 网页版</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="app-header">
+    <div class="title">
+      <span class="logo">PDF</span>
+      <h1>PDF 工具</h1>
+    </div>
+    <div class="header-right">
+      <div class="mode-badge" id="modeBadge">检测中…</div>
+      <div class="user-area">
+        <span id="userLabel" title="双击打开菜单">{{ username }}</span>
+        <div class="user-menu" id="userMenu" hidden>
+          <button data-act="change-pwd">修改密码</button>
+          {% if is_admin %}<button data-act="manage">用户管理</button>{% endif %}
+          <button data-act="logout" class="danger">注销</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabs" id="tabs">
+    <button class="tab active" data-tab="merge">合并</button>
+    <button class="tab" data-tab="split">拆分</button>
+    <button class="tab" data-tab="convert">转换</button>
+    <button class="tab" data-tab="compose">合成</button>
+    <button class="tab" data-tab="append">拼接</button>
+    <button class="tab" data-tab="insert">插入</button>
+  </nav>
+
+  <main class="content">
+
+    <!-- ===================== 合并 ===================== -->
+    <section id="panel-merge" class="panel active">
+      <div class="block">
+        <div class="block-head">
+          <h3>文件列表</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">添加文件</button>
+            <button class="btn" data-action="undo">撤销</button>
+            <button class="btn" data-action="redo">重做</button>
+            <button class="btn btn-danger" data-action="clear">清空</button>
+          </div>
+        </div>
+        <ul class="file-list" id="merge-list" data-draggable="true"></ul>
+        <div class="file-summary" id="merge-summary">共 0 个文件，0 页</div>
+      </div>
+      <div class="block">
+        <h3>参数</h3>
+        <div class="param-row">
+          <label>排序模式</label>
+          <select id="merge-sort">
+            <option value="specified">指定顺序（按列表排列）</option>
+            <option value="folder">文件夹内顺序（递归自然排序）</option>
+            <option value="by_folder">按文件夹顺序（根目录在前）</option>
+          </select>
+        </div>
+        <div class="param-row" id="merge-folder-row" hidden>
+          <label>文件夹路径</label>
+          <input type="text" id="merge-folder" class="path-input" readonly placeholder="点击右侧浏览选择文件夹">
+          <button class="btn" data-action="browse-folder">浏览</button>
+        </div>
+        <div class="param-row">
+          <label><input type="checkbox" id="merge-fast" checked> 快速模式（大文件更快，文件略大）</label>
+        </div>
+      </div>
+      <div class="block output-block">
+        <h3>输出</h3>
+        <div class="param-row">
+          <input type="text" id="merge-output" class="path-input" placeholder="输出文件路径 (.pdf)">
+          <button class="btn" data-action="browse-output-file">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始合并</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="merge-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="merge-result"></div>
+    </section>
+
+    <!-- ===================== 拆分 ===================== -->
+    <section id="panel-split" class="panel">
+      <div class="block">
+        <div class="block-head">
+          <h3>输入 PDF</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">选择 PDF</button>
+          </div>
+        </div>
+        <ul class="file-list" id="split-list"></ul>
+        <div class="file-summary" id="split-summary">未选择文件</div>
+      </div>
+      <div class="block">
+        <h3>参数</h3>
+        <div class="param-row">
+          <label>拆分模式</label>
+          <select id="split-mode">
+            <option value="single">单页拆分（每页一个 PDF，打包 ZIP）</option>
+            <option value="range">按范围提取（合并为单个 PDF）</option>
+            <option value="extract">提取指定页（合并为单个 PDF）</option>
+          </select>
+        </div>
+        <div class="param-row" id="split-range-row">
+          <label>页码范围</label>
+          <input type="text" id="split-range" placeholder="如 1-3,5,8-10">
+          <span class="hint">将所选页按顺序合并为 <b>一个</b> PDF 文件</span>
+        </div>
+        <div class="param-row" id="split-extract-row">
+          <label>提取页码</label>
+          <input type="text" id="split-extract" placeholder="如 1,3,5 或 1-3">
+          <span class="hint">将所选页按顺序合并为 <b>一个</b> PDF 文件</span>
+        </div>
+      </div>
+      <div class="block output-block">
+        <h3>输出目录</h3>
+        <div class="param-row">
+          <input type="text" id="split-output" class="path-input" placeholder="输出目录路径">
+          <button class="btn" data-action="browse-output-dir">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始拆分</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="split-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="split-result"></div>
+    </section>
+
+    <!-- ===================== 转换 ===================== -->
+    <section id="panel-convert" class="panel">
+      <div class="block">
+        <div class="block-head">
+          <h3>输入 PDF</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">选择 PDF</button>
+          </div>
+        </div>
+        <ul class="file-list" id="convert-list"></ul>
+        <div class="file-summary" id="convert-summary">未选择文件</div>
+      </div>
+      <div class="block">
+        <h3>功能说明</h3>
+        <div class="info-box">
+          <p>将 PDF 文件转换为可编辑的 Word 文档（<code>.docx</code>）。转换时自动识别 PDF 类型：</p>
+          <ul>
+            <li><b>文本型 PDF</b>（由 Word/网页等导出）：直接提取文字与字体、字号、粗体/斜体、对齐方式，并在每页末尾分页；图片以原位置嵌入。</li>
+            <li><b>扫描型 PDF</b>（拍照或扫描得到，无可提取文字）：将每页渲染为图片插入 DOCX，<b>不会产生可编辑文字</b>。如需可编辑文字，请先用 OCR 工具处理。</li>
+          </ul>
+          <p class="muted">提示：复杂排版（多栏、表格、公式）可能与原文有差异；纯图片型 PDF 的输出体积取决于 DPI。</p>
+        </div>
+      </div>
+      <div class="block">
+        <h3>参数</h3>
+        <div class="param-row">
+          <label>渲染 DPI</label>
+          <input type="number" id="convert-dpi" value="150" min="50" max="600" step="10">
+          <span class="hint">仅扫描型 PDF 生效；越高越清晰，文件也越大。常用：150（默认）/ 200 / 300</span>
+        </div>
+      </div>
+      <div class="block output-block">
+        <h3>输出 DOCX</h3>
+        <div class="param-row">
+          <input type="text" id="convert-output" class="path-input" placeholder="输出文件路径 (.docx)">
+          <button class="btn" data-action="browse-output-docx">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始转换</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="convert-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="convert-result"></div>
+    </section>
+
+    <!-- ===================== 合成 ===================== -->
+    <section id="panel-compose" class="panel">
+      <div class="block">
+        <div class="block-head">
+          <h3>图片列表</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">添加图片</button>
+            <button class="btn" data-action="undo">撤销</button>
+            <button class="btn" data-action="redo">重做</button>
+            <button class="btn btn-danger" data-action="clear">清空</button>
+          </div>
+        </div>
+        <ul class="file-list" id="compose-list" data-draggable="true"></ul>
+        <div class="file-summary" id="compose-summary">共 0 张图片</div>
+      </div>
+      <div class="block output-block">
+        <h3>输出</h3>
+        <div class="param-row">
+          <input type="text" id="compose-output" class="path-input" placeholder="输出文件路径 (.pdf)">
+          <button class="btn" data-action="browse-output-file">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始合成</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="compose-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="compose-result"></div>
+    </section>
+
+    <!-- ===================== 拼接 ===================== -->
+    <section id="panel-append" class="panel">
+      <div class="block">
+        <div class="block-head">
+          <h3>文件列表（图片 + PDF）</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">添加文件</button>
+            <button class="btn" data-action="undo">撤销</button>
+            <button class="btn" data-action="redo">重做</button>
+            <button class="btn btn-danger" data-action="clear">清空</button>
+          </div>
+        </div>
+        <ul class="file-list" id="append-list" data-draggable="true"></ul>
+        <div class="file-summary" id="append-summary">共 0 个文件，0 页</div>
+      </div>
+      <div class="block output-block">
+        <h3>输出</h3>
+        <div class="param-row">
+          <input type="text" id="append-output" class="path-input" placeholder="输出文件路径 (.pdf)">
+          <button class="btn" data-action="browse-output-file">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始拼接</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="append-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="append-result"></div>
+    </section>
+
+    <!-- ===================== 插入 ===================== -->
+    <section id="panel-insert" class="panel">
+      <div class="block">
+        <div class="block-head">
+          <h3>基础 PDF</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-base">选择基础 PDF</button>
+          </div>
+        </div>
+        <ul class="file-list" id="insert-base-list"></ul>
+        <div class="file-summary" id="insert-base-summary">未选择基础 PDF</div>
+      </div>
+      <div class="block">
+        <div class="block-head">
+          <h3>插入内容（图片/PDF）</h3>
+          <div class="block-actions">
+            <button class="btn" data-action="add-files">添加文件</button>
+            <button class="btn" data-action="undo">撤销</button>
+            <button class="btn" data-action="redo">重做</button>
+            <button class="btn btn-danger" data-action="clear">清空</button>
+          </div>
+        </div>
+        <ul class="file-list" id="insert-list" data-draggable="true"></ul>
+        <div class="file-summary" id="insert-summary">共 0 个插入文件</div>
+      </div>
+      <div class="block">
+        <h3>参数</h3>
+        <div class="param-row">
+          <label>插入位置（在第 N 页之前）</label>
+          <input type="number" id="insert-page" value="1" min="1" step="1">
+          <span class="hint" id="insert-page-hint"></span>
+        </div>
+      </div>
+      <div class="block output-block">
+        <h3>输出</h3>
+        <div class="param-row">
+          <input type="text" id="insert-output" class="path-input" placeholder="输出文件路径 (.pdf)">
+          <button class="btn" data-action="browse-output-file">浏览</button>
+        </div>
+      </div>
+      <div class="action-bar">
+        <button class="btn btn-primary" data-action="start">开始插入</button>
+        <button class="btn btn-danger" data-action="cancel" disabled>取消</button>
+      </div>
+      <div class="progress-wrap" id="insert-progress" hidden>
+        <div class="progress"><div class="progress-bar"></div></div>
+        <div class="progress-text"></div>
+      </div>
+      <div class="result" id="insert-result"></div>
+    </section>
+
+  </main>
+
+  <!-- 隐藏的文件上传 input（远程模式用） -->
+  <input type="file" id="hidden-file-input" multiple accept=".pdf,.jpg,.jpeg,.png,.bmp,.gif,.tiff,.tif,.webp" hidden>
+
+  <!-- 路径浏览器弹窗（本机模式用） -->
+  <div class="modal" id="pathModal" hidden>
+    <div class="modal-card">
+      <div class="modal-head">
+        <h3 id="pathModal-title">选择路径</h3>
+        <button class="btn btn-icon" id="pathModal-close">×</button>
+      </div>
+      <div class="modal-shortcuts">
+        <div class="shortcut-group">
+          <span class="shortcut-label">常用</span>
+          <ul class="shortcut-list" id="pathModal-quick"></ul>
+        </div>
+        <div class="shortcut-group">
+          <span class="shortcut-label">最近</span>
+          <ul class="shortcut-list" id="pathModal-recent"></ul>
+        </div>
+      </div>
+      <div class="modal-crumb" id="pathModal-crumb"></div>
+      <div class="modal-path-bar">
+        <button class="btn" id="pathModal-up">上一级</button>
+        <input type="text" id="pathModal-path" class="path-input" placeholder="当前路径">
+        <button class="btn" id="pathModal-go">前往</button>
+      </div>
+      <ul class="modal-list" id="pathModal-list"></ul>
+      <div class="modal-foot">
+        <span class="hint" id="pathModal-hint"></span>
+        <div>
+          <button class="btn" id="pathModal-cancel">取消</button>
+          <button class="btn btn-primary" id="pathModal-confirm">确定</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 修改密码弹窗 -->
+  <div class="modal" id="pwdModal" hidden>
+    <div class="modal-card" style="max-width:420px">
+      <div class="modal-head">
+        <h3>修改密码</h3>
+        <button class="btn btn-icon" id="pwdModal-close">×</button>
+      </div>
+      <div style="padding:16px">
+        <div class="param-row"><label>原密码</label><input type="password" id="pwd-old" class="path-input" autocomplete="current-password"></div>
+        <div class="param-row"><label>新密码</label><input type="password" id="pwd-new" class="path-input" placeholder="至少 6 位" autocomplete="new-password"></div>
+        <div class="param-row"><label>确认新密码</label><input type="password" id="pwd-new2" class="path-input" autocomplete="new-password"></div>
+        <div class="result" id="pwd-result"></div>
+      </div>
+      <div class="modal-foot">
+        <span></span>
+        <div>
+          <button class="btn" id="pwdModal-cancel">取消</button>
+          <button class="btn btn-primary" id="pwdModal-ok">确认修改</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 用户管理弹窗（仅管理员） -->
+  <div class="modal" id="userModal" hidden>
+    <div class="modal-card" style="max-width:640px">
+      <div class="modal-head">
+        <h3>用户管理</h3>
+        <button class="btn btn-icon" id="userModal-close">×</button>
+      </div>
+      <div style="padding:8px 16px">
+        <ul class="user-list" id="userList"></ul>
+      </div>
+      <div class="modal-foot">
+        <span class="hint">点击角色切换 admin/user；重置密码需输入新密码</span>
+        <button class="btn" id="userModal-close2">关闭</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
