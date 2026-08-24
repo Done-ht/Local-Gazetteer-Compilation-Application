@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2563eb">
+    <title>server-paddle OCR 局域网识别服务</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <header class="topbar">
+        <div class="topbar-inner">
+            <h1 class="title">
+                <span class="logo">📄</span> server-paddle OCR
+            </h1>
+            <span class="user-area">
+                <a href="/admin" id="adminLink" class="user-link" style="display:none" title="用户管理">用户管理</a>
+                <span id="userWho" class="user-who"></span>
+                <button class="btn btn-ghost user-logout" id="logoutBtn" style="display:none">退出</button>
+            </span>
+            <div class="status-pill" id="statusPill" title="服务状态">
+                <span class="dot" id="statusDot"></span>
+                <span id="statusText">连接中…</span>
+            </div>
+        </div>
+        <div class="status-detail" id="statusDetail">
+            <span>引擎: <b id="engineName">—</b></span>
+            <span>并发: <b id="concInfo">—/—</b></span>
+            <span>排队: <b id="queueInfo">0</b></span>
+            <span>局域网: <b id="lanUrl">—</b></span>
+        </div>
+    </header>
+
+    <main class="container">
+        <!-- 引导 / 二维码区（首屏） -->
+        <section class="card hero" id="heroCard">
+            <div class="hero-left">
+                <h2>局域网 OCR 识别服务</h2>
+                <p>本地模式识别引擎，纯 CPU 运行，无需联网。</p>
+                <p>支持 JPG / PNG / BMP / PDF / DOCX，多文件批量识别。</p>
+                <p class="lan-tip">手机扫码或在浏览器输入下方地址即可使用：</p>
+                <p class="lan-url" id="lanUrlBig">—</p>
+            </div>
+            <div class="hero-right">
+                <img id="qrImg" alt="局域网访问二维码" title="扫码访问">
+            </div>
+        </section>
+
+        <!-- 文件选择区（仅负责选文件加入清单，不直接上传） -->
+        <section class="card">
+            <h2 class="section-title">选择文件</h2>
+            <div class="dropzone" id="dropzone" tabindex="0">
+                <div class="dz-inner">
+                    <div class="dz-icon">📥</div>
+                    <p class="dz-text">拖拽文件到此处，或 <span class="link">点击选择</span></p>
+                    <p class="dz-hint">支持 .jpg .jpeg .png .bmp .pdf .docx，可多选，可重复添加</p>
+                </div>
+                <input type="file" id="fileInput" multiple
+                       accept=".jpg,.jpeg,.png,.bmp,.pdf,.docx" hidden>
+            </div>
+            <!-- 文件夹上传（webkitdirectory）：浏览器会把文件夹内所有文件作为 FileList 返回 -->
+            <input type="file" id="folderInput" webkitdirectory directory multiple hidden>
+            <!-- 导入半成品：上传 .ocr_draft 文件，断点续传 -->
+            <input type="file" id="draftInput" accept=".ocr_draft" hidden>
+            <div class="picker-actions">
+                <button class="btn btn-ghost" id="folderBtn" title="选择整个文件夹（含子目录）">📁 选择文件夹</button>
+                <button class="btn btn-ghost" id="draftBtn" title="导入 .ocr_draft 半成品文件，从断点继续处理">📦 导入半成品续作</button>
+            </div>
+        </section>
+
+        <!-- 待提交清单区（购物车式暂存，确认后作为一个批次提交） -->
+        <section class="card" id="cartCard">
+            <h2 class="section-title">
+                待提交清单
+                <span class="cart-count" id="cartCount">0 个文件</span>
+            </h2>
+            <div class="cart-list" id="cartList">
+                <p class="empty-hint" id="cartEmpty">清单为空，请选择文件加入</p>
+            </div>
+            <div class="cart-options">
+                <label title="每个任务使用的并发进程数。大于1时PDF按页切分并行处理，占用对应数量的全局槽位。例如选3则10页PDF分成3+4+3并行处理，全局可用并发数减少3">
+                    🔀 任务并发数：
+                    <select id="taskConcurrencySelect">
+                        <option value="1">1（默认，单进程）</option>
+                        <option value="2">2（2进程并行）</option>
+                        <option value="3">3（3进程并行）</option>
+                        <option value="4">4（4进程并行）</option>
+                        <option value="5">5（5进程并行）</option>
+                        <option value="6">6（6进程并行）</option>
+                    </select>
+                </label>
+                <span id="slotsInfo" class="slots-info" style="color:#0969da;font-size:12px;"></span>
+                <span style="color:#6b7280;font-size:12px;">越多越快</span>
+                <label title="留空=立即执行；选择未来时间=预约到点执行（7天内），用于错峰服务器高峰">
+                    ⏰ 预约执行（错峰）：
+                    <input type="datetime-local" id="scheduleInput">
+                </label>
+                <div class="cart-actions">
+                    <button class="btn btn-ghost btn-sm" id="clearCartBtn" disabled>清空清单</button>
+                    <button class="btn btn-primary" id="submitTaskBtn" disabled>提交任务</button>
+                </div>
+            </div>
+            <p class="cart-tip" id="cartTip"></p>
+        </section>
+
+        <!-- 任务列表 -->
+        <section class="card">
+            <h2 class="section-title">
+                任务列表
+                <button class="btn btn-ghost btn-sm" id="downloadZipBtn" disabled>打包全部</button>
+                <button class="btn btn-ghost btn-sm" id="clearDoneBtn">清理已完成</button>
+            </h2>
+            <div class="task-list" id="taskList">
+                <p class="empty-hint" id="taskEmpty">暂无任务，上传文件开始识别。</p>
+            </div>
+        </section>
+
+        <!-- 设置区 -->
+        <section class="card">
+            <h2 class="section-title">设置</h2>
+            <div class="settings-grid">
+                <label>渲染 DPI：
+                    <input type="number" id="cfgDpi" min="50" max="600" step="10">
+                </label>
+                <label>并发数：
+                    <input type="number" id="cfgConc" min="1" max="16" step="1">
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="cfgLayer2">
+                    启用第二层过滤（PaddleOCR 检测）
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="cfgLayout">
+                    启用版面分析（PPStructure）
+                </label>
+                <label class="checkbox-label">
+                    <input type="checkbox" id="cfgTableRec">
+                    启用表格结构识别（SLANet，关闭可大幅提速）
+                </label>
+                <label class="field-label">
+                    OCR 模型档位
+                    <select id="cfgTier">
+                        <option value="tiny">tiny（最快·精度低·1.9+4.4MB）</option>
+                        <option value="small">small（默认·平衡·9.6+20.4MB）</option>
+                        <option value="medium">medium（高精度·慢·59.4+73.3MB）</option>
+                    </select>
+                </label>
+                <div class="settings-actions">
+                    <button class="btn btn-primary" id="saveConfigBtn">保存配置</button>
+                    <span class="save-hint" id="saveHint"></span>
+                </div>
+            </div>
+            <p class="settings-note">
+                注：并发数调整写入配置，下次启动生效（asyncio 信号量容量无法热更新）。
+            </p>
+        </section>
+
+        <!-- 日志区 -->
+        <section class="card">
+            <h2 class="section-title">
+                日志
+                <button class="btn btn-ghost btn-sm" id="clearLogBtn">清空</button>
+            </h2>
+            <div class="log-box" id="logBox"></div>
+        </section>
+    </main>
+
+    <footer class="footer">
+        <span>server-paddle OCR · 局域网运行 · 本地模式</span>
+    </footer>
+
+    <!-- 任务结果模板（结果区动态插入 task-list） -->
+    <script src="/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "ocr_provider": "paddle_local",
+  "output_format": "original",
+  "output_dir": "",
+  "filter": {
+    "edge_density_threshold": 0.03,
+    "variance_threshold": 15.0,
+    "connected_min_area": 30,
+    "enable_layer2": true
+  },
+  "paddle": {
+    "lang": "ch",
+    "use_gpu": false,
+    "ocr_version": "PP-OCRv6",
+    "det_model_dir": "",
+    "rec_model_dir": "",
+    "det_score_thresh": 0.3,
+    "drop_score": 0.0,
+    "det_db_unclip_ratio": 1.8,
+    "det_db_box_thresh": 0.5,
+    "enable_layout": true,
+    "ocr_model_tier": "small",
+    "use_table_recognition": false
+  },
+  "render_dpi": 200,
+  "max_concurrent": 5,
+  "port": 8022,
+  "mode": "paddle",
+  "xf": {
+    "app_id": "",
+    "api_key": "",
+    "api_secret": "",
+    "api_type": "llm",
+    "max_image_bytes": 4194304,
+    "timeout": 60,
+    "retry": 3,
+    "page_concurrency": 5,
+    "concurrent_limit": 3,
+    "max_upload_bytes": 314572800
+  }
+}

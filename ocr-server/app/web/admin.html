@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>用户管理 · OCR 识别服务</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; background: #f0f2f5; color: #1f2329; padding: 24px 16px 60px; }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  header h1 { font-size: 20px; }
+  header .ops { display: flex; gap: 10px; }
+  button { padding: 7px 14px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  button.ghost { background: #fff; color: #1677ff; border: 1px solid #1677ff; }
+  button.small { padding: 4px 10px; font-size: 12px; background: #fff; border: 1px solid #d9d9d9; color: #444; }
+  button.small:hover { border-color: #1677ff; color: #1677ff; }
+  button.danger { color: #cf1322; border-color: #cf1322; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid #f0f0f0; }
+  th { color: #8a94a6; font-weight: 500; font-size: 13px; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+  .tag.admin { background: #fff1f0; color: #cf1322; }
+  .tag.user { background: #e6f4ff; color: #0958d9; }
+  .tag.on { background: #f6ffed; color: #389e0d; }
+  .tag.off { background: #f0f0f0; color: #666; }
+  .msg { color: #cf1322; font-size: 13px; margin-top: 12px; min-height: 18px; }
+  .ops-cell { display: flex; gap: 6px; flex-wrap: wrap; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>👥 用户管理</h1>
+    <div class="ops">
+      <button class="ghost" onclick="location.href='/'">返回首页</button>
+      <button class="ghost" onclick="doLogout()">退出登录</button>
+    </div>
+  </header>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr><th>用户名</th><th>角色</th><th>状态</th><th>创建时间</th><th>最后登录</th><th>操作</th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="msg" id="msg"></div>
+  </div>
+</div>
+
+<script>
+const TOKEN = localStorage.getItem('token') || '';
+
+async function api(url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers || {}, { 'X-Access-Token': TOKEN });
+  const res = await fetch(url, opts);
+  if (res.status === 401) { location.href = '/login'; throw new Error('unauthorized'); }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || ('请求失败 (' + res.status + ')'));
+  return data;
+}
+
+async function loadUsers() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '<tr><td colspan="6">加载中…</td></tr>';
+  try {
+    const data = await api('/api/admin/users');
+    const me = await api('/api/me');
+    const meId = me.user.user_id;
+    tbody.innerHTML = '';
+    for (const u of data.users) {
+      const tr = document.createElement('tr');
+      const roleTag = u.is_admin ? '<span class="tag admin">管理员</span>' : '<span class="tag user">普通用户</span>';
+      const stateTag = u.is_active ? '<span class="tag on">正常</span>' : '<span class="tag off">已禁用</span>';
+      let ops = '';
+      if (u.user_id !== meId) {
+        ops += u.is_active
+          ? `<button class="small" onclick="setActive('${u.user_id}', false)">禁用</button>`
+          : `<button class="small" onclick="setActive('${u.user_id}', true)">启用</button>`;
+        ops += `<button class="small" onclick="resetPw('${u.user_id}', '${u.username}')">重置密码</button>`;
+        ops += `<button class="small danger" onclick="delUser('${u.user_id}', '${u.username}')">删除</button>`;
+      } else {
+        ops = '<span class="tag user" style="background:#f6f6f6;color:#999">当前账号</span>';
+      }
+      tr.innerHTML = `<td>${u.username}</td><td>${roleTag}</td><td>${stateTag}</td>
+        <td>${u.created_at || '-'}</td><td>${u.last_login_at || '-'}</td>
+        <td><div class="ops-cell">${ops}</div></td>`;
+      tbody.appendChild(tr);
+    }
+  } catch (e) {
+    if (e.message !== 'unauthorized') document.getElementById('msg').textContent = e.message;
+  }
+}
+
+async function setActive(userId, active) {
+  try {
+    await api('/api/admin/users/' + userId + '/' + (active ? 'enable' : 'disable'), { method: 'POST' });
+    loadUsers();
+  } catch (e) { document.getElementById('msg').textContent = e.message; }
+}
+
+async function resetPw(userId, username) {
+  const pw = prompt(`为用户 ${username} 设置新密码（至少 6 位）：`);
+  if (pw === null) return;
+  if (pw.length < 6) { document.getElementById('msg').textContent = '密码至少 6 位'; return; }
+  try {
+    await api('/api/admin/users/' + userId + '/reset-password', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    alert('已重置 ' + username + ' 的密码');
+  } catch (e) { document.getElementById('msg').textContent = e.message; }
+}
+
+async function delUser(userId, username) {
+  if (!confirm(`确定删除用户 ${username}？其上传与识别数据将一并删除，且不可恢复。`)) return;
+  try {
+    await api('/api/admin/users/' + userId, { method: 'DELETE' });
+    loadUsers();
+  } catch (e) { document.getElementById('msg').textContent = e.message; }
+}
+
+async function doLogout() {
+  try { await api('/api/logout', { method: 'POST' }); } catch (e) {}
+  localStorage.removeItem('token');
+  localStorage.removeItem('username');
+  location.href = '/login';
+}
+
+loadUsers();
+</script>
+</body>
+</html>

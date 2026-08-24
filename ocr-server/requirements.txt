@@ -1,0 +1,32 @@
+# Web 框架
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+
+# 图像处理
+opencv-python>=4.8.0
+# numpy 须 <2.0：paddlepaddle 3.2.0 的 C++ ABI 与 numpy 2.x 不兼容，
+# 2.x 会触发 "numpy.dtype size changed" 或段错误。
+numpy>=1.24.0,<2.0.0
+Pillow>=10.0.0
+
+# PDF 处理（渲染 + 可搜索 PDF 输出）
+PyMuPDF>=1.23.0
+
+# DOCX 处理
+python-docx>=1.1.0
+
+# 本地 OCR —— PaddleOCR v6（PP-OCRv6 + PP-StructureV3）
+# paddleocr 3.7.0 默认加载 PP-OCRv6 模型（PPLCNetV4 骨干），small 档识别精度 81.3%，
+# 单模型支持 50 种语言，较 v5 提升 5+ 个百分点。
+# paddlepaddle 3.2.0 为 CPU 推理基座，支持 auto_growth 内存分配器归还 OS。
+# 首次运行会从 paddle-model-ecology.bj.bcebos.com 下载模型（约 300MB），离线部署
+# 需提前将模型解压到 paddleocr_models/ 目录或打包内置该目录。
+paddlepaddle==3.2.0
+paddleocr==3.7.0
+
+# 二维码（引导页局域网地址）
+qrcode[pil]>=7.4.2
+
+# 进程内存监控（调试日志，可选但推荐）
+psutil>=5.9.0

@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>图片识别 · 讯飞 OCR</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; background: #f0f2f5; color: #1f2329; }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 24px 16px 60px; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 20px; }
+  header h1 { font-size: 20px; }
+  header .who { font-size: 13px; color: #666; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 1px 3px rgba(0,0,0,.08); padding: 20px; margin-bottom: 16px; }
+  .card h2 { font-size: 15px; margin-bottom: 12px; }
+  input[type=text], input[type=password] { width: 100%; padding: 9px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; }
+  input:focus { outline: none; border-color: #1677ff; }
+  button { padding: 8px 18px; border: none; border-radius: 6px; background: #1677ff; color: #fff; font-size: 14px; cursor: pointer; }
+  button:hover { opacity: .9; }
+  button.ghost { background: #fff; color: #1677ff; border: 1px solid #1677ff; }
+  .row { display: flex; gap: 8px; }
+  .row input { flex: 1; }
+  .tabs { display: flex; margin-bottom: 14px; border-bottom: 1px solid #eee; }
+  .tabs button { flex: 1; background: none; border: none; padding: 8px 0; font-size: 14px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; border-radius: 0; }
+  .tabs button.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: 600; }
+  .dropzone { border: 2px dashed #b7c3d0; border-radius: 10px; padding: 34px 16px; text-align: center; color: #6b7a8d; cursor: pointer; transition: .15s; }
+  .dropzone.drag { border-color: #1677ff; background: #eef5ff; }
+  .dropzone .big { font-size: 15px; margin-bottom: 6px; }
+  .dropzone .small { font-size: 12px; }
+  .task { display: flex; align-items: center; gap: 12px; padding: 12px 4px; border-bottom: 1px solid #f0f0f0; }
+  .task:last-child { border-bottom: none; }
+  .task .info { flex: 1; min-width: 0; }
+  .task .name { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task .meta { font-size: 12px; color: #8a94a6; margin-top: 3px; }
+  .bar { height: 6px; background: #eee; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: #1677ff; border-radius: 3px; transition: width .3s; }
+  .tag { font-size: 12px; padding: 2px 8px; border-radius: 10px; white-space: nowrap; }
+  .tag.pending, .tag.queued, .tag.processing { background: #fff7e6; color: #d46b08; }
+  .tag.done { background: #f6ffed; color: #389e0d; }
+  .tag.error { background: #fff1f0; color: #cf1322; }
+  .tag.canceled { background: #f0f0f0; color: #666; }
+  .dl { display: flex; gap: 6px; }
+  .dl a { font-size: 12px; color: #1677ff; text-decoration: none; border: 1px solid #1677ff; border-radius: 4px; padding: 3px 8px; }
+  .btn-danger { background: #fff; color: #cf1322; border: 1px solid #cf1322; }
+  .error { color: #cf1322; font-size: 13px; margin-top: 8px; }
+  .hint { font-size: 12px; color: #8a94a6; margin-top: 6px; }
+  .hidden { display: none !important; }
+  .banner { background: #fff1f0; border: 1px solid #ffccc7; color: #cf1322; padding: 10px 14px; border-radius: 8px; margin-bottom: 14px; font-size: 13px; line-height: 1.6; }
+  .muted { color: #8a94a6; }
+  .admin-link { margin-right: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- 登录 / 注册 -->
+  <div class="card" id="loginCard">
+    <h2>登录</h2>
+    <div class="tabs">
+      <button id="tabLogin" class="active" onclick="switchTab('login')">登录</button>
+      <button id="tabReg" onclick="switchTab('reg')">注册</button>
+    </div>
+    <div id="panelLogin">
+      <div class="row">
+        <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
+        <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')login()">
+        <button onclick="login()">登录</button>
+      </div>
+    </div>
+    <div id="panelReg" class="hidden">
+      <div class="row" style="margin-bottom:8px">
+        <input type="text" id="regUser" placeholder="用户名（2-32 字符，可中文）" autocomplete="username">
+      </div>
+      <div class="row" style="margin-bottom:8px">
+        <input type="password" id="regPass" placeholder="密码（至少 6 位）" autocomplete="new-password">
+        <input type="password" id="regPass2" placeholder="确认密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')register()">
+        <button onclick="register()">注册</button>
+      </div>
+      <div class="hint">开放注册；<b>第一个注册的用户自动成为管理员</b>，之后注册的都是普通用户。</div>
+    </div>
+    <div class="error" id="loginErr"></div>
+  </div>
+
+  <!-- 主界面 -->
+  <div id="mainView" class="hidden">
+    <div id="serverBanner" class="banner hidden">⚠ 无法连接服务器：服务可能未启动或已停止。请重新启动（双击 run.bat），页面会每 2 秒自动重试连接。</div>
+
+    <header>
+      <h1>图片识别 · 讯飞 OCR</h1>
+      <div class="who">
+        <a href="/admin" id="adminLink" class="muted admin-link hidden">用户管理</a>
+        <span id="whoami"></span> · <a href="javascript:logout()" class="muted">退出</a>
+      </div>
+    </header>
+
+    <!-- 管理员：讯飞设置 -->
+    <div class="card hidden" id="settingsCard">
+      <h2>讯飞 OCR 设置（管理员）</h2>
+      <div style="margin-bottom:8px">
+        <label class="hint">App ID</label>
+        <input type="text" id="xfAppId" placeholder="讯飞控制台的 App ID">
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="hint">API Key</label>
+        <input type="text" id="xfApiKey" placeholder="讯飞控制台的 API Key">
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="hint">API Secret</label>
+        <input type="text" id="xfApiSecret" placeholder="讯飞控制台的 API Secret">
+      </div>
+      <div style="margin-bottom:8px">
+        <label class="hint">接口类型</label>
+        <select id="xfApiType" style="padding:8px;border:1px solid #d9d9d9;border-radius:6px">
+          <option value="llm">通用文档识别大模型（llm）</option>
+          <option value="standard">通用文字识别（standard）</option>
+        </select>
+      </div>
+      <div class="row">
+        <button onclick="saveSettings()">保存设置</button>
+        <button class="ghost" onclick="testNetwork()">测试网络</button>
+      </div>
+      <div class="hint" id="settingsHint">保存后即时生效。接口类型必须与讯飞控制台开通的服务一致，否则报 code=11201。</div>
+    </div>
+
+    <!-- 上传 -->
+    <div class="card">
+      <h2>上传文件识别</h2>
+      <div class="dropzone" id="dropzone">
+        <div class="big">点击选择，或拖拽文件到此处</div>
+        <div class="small">支持 pdf / docx / jpg / jpeg / png / bmp / webp / tiff，可多选，识别结果可下载为 PDF（可搜索）/ DOCX / TXT</div>
+      </div>
+      <input type="file" id="fileInput" multiple hidden
+             accept=".pdf,.docx,.jpg,.jpeg,.png,.bmp,.webp,.tiff,.tif">
+      <div class="error" id="uploadErr"></div>
+    </div>
+
+    <!-- 任务列表 -->
+    <div class="card">
+      <h2>识别任务</h2>
+      <div id="taskList"><div class="muted">暂无任务</div></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let TOKEN = localStorage.getItem("token") || "";
+let CURRENT = null;   // {user_id, username, is_admin}
+let timer = null;
+
+// ---------- 统一 fetch：附加 token；401 跳登录 ----------
+const _origFetch = window.fetch;
+window.fetch = function (url, opts) {
+  opts = opts || {};
+  opts.headers = Object.assign({}, opts.headers || {}, TOKEN ? { "X-Access-Token": TOKEN } : {});
+  return _origFetch(url, opts).then(function (res) {
+    if (res.status === 401) {
+      const s = String(url);
+      if (s.indexOf("/api/login") < 0 && s.indexOf("/api/register") < 0) {
+        TOKEN = ""; localStorage.removeItem("token");
+        location.href = "/login";
+        throw new Error("unauthorized");
+      }
+    }
+    return res;
+  });
+};
+
+// ---------- 登录 / 注册 ----------
+function switchTab(t) {
+  document.getElementById("tabLogin").classList.toggle("active", t === "login");
+  document.getElementById("tabReg").classList.toggle("active", t === "reg");
+  document.getElementById("panelLogin").classList.toggle("hidden", t !== "login");
+  document.getElementById("panelReg").classList.toggle("hidden", t !== "reg");
+  showErr("loginErr", "");
+}
+
+async function login() {
+  const username = document.getElementById("loginUser").value.trim();
+  const password = document.getElementById("loginPass").value;
+  if (!username || !password) { showErr("loginErr", "请输入用户名和密码"); return; }
+  try {
+    const r = await _origFetch("/api/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { showErr("loginErr", j.detail || j.error || "登录失败"); return; }
+    TOKEN = j.token;
+    localStorage.setItem("token", j.token);
+    CURRENT = j.user;
+    enterMain();
+  } catch (e) { showErr("loginErr", "网络错误：" + e.message); }
+}
+
+async function register() {
+  const username = document.getElementById("regUser").value.trim();
+  const password = document.getElementById("regPass").value;
+  const password2 = document.getElementById("regPass2").value;
+  if (!username || !password) { showErr("loginErr", "请输入用户名和密码"); return; }
+  if (password !== password2) { showErr("loginErr", "两次输入的密码不一致"); return; }
+  try {
+    const r = await _origFetch("/api/register", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password })
+    });
+    const j = await r.json();
+    if (!r.ok || !j.ok) { showErr("loginErr", j.detail || j.error || "注册失败"); return; }
+    alert(j.first_user ? "注册成功！您是第一个注册的用户，已成为管理员。请登录。" : "注册成功！请登录。");
+    switchTab("login");
+    document.getElementById("loginUser").value = username;
+    document.getElementById("loginPass").value = "";
+  } catch (e) { showErr("loginErr", "网络错误：" + e.message); }
+}
+
+async function logout() {
+  try { await fetch("/api/logout", { method: "POST" }); } catch (e) { /* 忽略 */ }
+  TOKEN = ""; CURRENT = null;
+  localStorage.removeItem("token");
+  location.reload();
+}
+
+function enterMain() {
+  document.getElementById("loginCard").classList.add("hidden");
+  document.getElementById("mainView").classList.remove("hidden");
+  document.getElementById("whoami").textContent = CURRENT.username + (CURRENT.is_admin ? "（管理员）" : "");
+  document.getElementById("adminLink").classList.toggle("hidden", !CURRENT.is_admin);
+  document.getElementById("settingsCard").classList.toggle("hidden", !CURRENT.is_admin);
+  if (CURRENT.is_admin) loadSettings();
+  startPolling();
+}
+
+// ---------- 管理员：讯飞设置 ----------
+async function loadSettings() {
+  try {
+    const r = await fetch("/api/settings");
+    const j = await r.json();
+    if (!j.ok) return;
+    const x = j.xf || {};
+    document.getElementById("xfAppId").value = x.app_id || "";
+    document.getElementById("xfApiKey").value = x.api_key || "";
+    document.getElementById("xfApiSecret").value = x.api_secret || "";
+    document.getElementById("xfApiType").value = x.api_type || "llm";
+  } catch (e) { /* 忽略 */ }
+}
+
+async function saveSettings() {
+  const hint = document.getElementById("settingsHint");
+  const payload = {
+    xf: {
+      app_id: document.getElementById("xfAppId").value.trim(),
+      api_key: document.getElementById("xfApiKey").value.trim(),
+      api_secret: document.getElementById("xfApiSecret").value.trim(),
+      api_type: document.getElementById("xfApiType").value
+    }
+  };
+  try {
+    const r = await fetch("/api/settings", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const j = await r.json();
+    hint.textContent = j.ok ? "已保存，即时生效。" : (j.detail || j.error || "保存失败");
+  } catch (e) {
+    hint.textContent = "网络错误";
+  }
+}
+
+async function testNetwork() {
+  const hint = document.getElementById("settingsHint");
+  hint.textContent = "正在探测讯飞服务器...";
+  try {
+    const r = await fetch("/api/network-check");
+    const j = await r.json();
+    const c = j.check || {};
+    hint.textContent = c.ok
+      ? "网络正常，到 " + c.host + " 延迟 " + c.ms + "ms。"
+      : "无法连接 " + c.host + "：" + (c.detail || "未知原因") + "。请检查本机网络。";
+  } catch (e) {
+    hint.textContent = "网络错误：" + e.message;
+  }
+}
+
+function showErr(id, msg) {
+  document.getElementById(id).textContent = msg;
+}
+
+// ---------- 上传 ----------
+const dz = document.getElementById("dropzone");
+const fi = document.getElementById("fileInput");
+dz.onclick = () => fi.click();
+dz.ondragover = e => { e.preventDefault(); dz.classList.add("drag"); };
+dz.ondragleave = () => dz.classList.remove("drag");
+dz.ondrop = e => {
+  e.preventDefault(); dz.classList.remove("drag");
+  uploadFiles(e.dataTransfer.files);
+};
+fi.onchange = () => { uploadFiles(fi.files); fi.value = ""; };
+
+async function uploadFiles(files) {
+  showErr("uploadErr", "");
+  const errBox = document.getElementById("uploadErr");
+
+  // 上传只依赖本地服务器；识别前的网络检查由服务端在任务启动时执行，
+  // 若网络不通任务会明确提示「继续识别」。因此上传阶段不再拦截。
+
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append("file", f);
+    errBox.textContent = "正在上传：" + f.name + " ...";
+    try {
+      const r = await fetch("/api/upload", { method: "POST", body: fd });
+      const j = await r.json();
+      if (!j.ok) { errBox.textContent = f.name + "：" + (j.detail || j.error || "上传失败"); }
+    } catch (e) {
+      errBox.textContent = f.name + "：网络错误，无法连接服务器（服务可能未启动或已停止）";
+      setServerBanner(true);
+    }
+  }
+  errBox.textContent = "";
+  refreshTasks();
+}
+
+// ---------- 任务列表 ----------
+function taskTag(status) {
+  const map = { pending: "等待中", queued: "排队中", processing: "识别中", done: "完成", error: "失败", canceled: "已取消" };
+  return '<span class="tag ' + status + '">' + (map[status] || status) + '</span>';
+}
+
+function renderTasks(tasks) {
+  const el = document.getElementById("taskList");
+  if (!tasks.length) { el.innerHTML = '<div class="muted">暂无任务</div>'; return; }
+  const delBtn = tid => '<button class="btn-danger" style="font-size:12px;padding:4px 10px" onclick="deleteTask(\'' + tid + '\')">删除</button>';
+  el.innerHTML = tasks.map(t => {
+    let right = taskTag(t.status);
+    if (t.status === "done") {
+      const tid = encodeURIComponent(t.task_id);
+      const fn = encodeURIComponent(t.filename || "result");
+      const dl = (fmt, label) => '<a href="javascript:;" onclick="downloadFile(\'' + tid + '\',\'' + fmt + '\',\'' + fn + '\')">' + label + '</a>';
+      let links = dl("docx", "DOCX") + dl("txt", "TXT");
+      if (!t.note) {
+        links = dl("pdf", "PDF") + links;
+      }
+      right = '<div class="dl">' + links + delBtn(tid) + '</div>';
+    } else if (t.status === "error") {
+      const tid = encodeURIComponent(t.task_id);
+      const btn = (t.resumable && t.completed > 0)
+        ? '<button class="ghost" style="font-size:12px;padding:4px 10px" onclick="retryTask(\'' + tid + '\',false)">继续识别</button>'
+        : '<button class="ghost" style="font-size:12px;padding:4px 10px" onclick="retryTask(\'' + tid + '\',true)">重新识别</button>';
+      right = '<div class="dl">' + btn + delBtn(tid) + '</div>';
+    } else if (t.status === "canceled") {
+      const tid = encodeURIComponent(t.task_id);
+      right = '<div class="dl">' + delBtn(tid) + '</div>';
+    } else if (t.status === "pending" || t.status === "queued" || t.status === "processing") {
+      const tid = encodeURIComponent(t.task_id);
+      right = '<button class="btn-danger" style="font-size:12px;padding:4px 10px" onclick="cancelTask(\'' + tid + '\')">取消</button>';
+    }
+    let bar = "";
+    if (t.status === "processing" || t.status === "pending" || t.status === "queued") {
+      const pct = t.total ? Math.round(t.progress / t.total * 100) : 0;
+      bar = '<div class="bar"><i style="width:' + (t.status === "processing" ? pct : 2) + '%"></i></div>';
+    }
+    const meta = t.error ? '<div class="meta" style="color:#cf1322">' + escapeHtml(t.error) + '</div>'
+      : '<div class="meta">' + escapeHtml(t.created_at) + (t.page_count ? " · 共 " + t.page_count + " 页" : "") +
+        (t.note ? ' · <span style="color:#d46b08">' + escapeHtml(t.note) + '</span>' : "") + '</div>';
+    const progressText = (t.status === "processing" && t.total)
+      ? '<div class="hint">已识别 ' + t.progress + ' / ' + t.total + ' 页</div>' : "";
+    return '<div class="task"><div class="info"><div class="name">' + escapeHtml(t.filename) + '</div>' +
+           meta + bar + progressText + '</div><div>' + right + '</div></div>';
+  }).join("");
+}
+
+// 下载走 fetch + blob，token 放在请求头（不进 URL，避免泄露到历史/日志/Referer）
+async function downloadFile(taskId, fmt, filename) {
+  try {
+    const r = await fetch("/api/download/" + taskId + "?format=" + fmt);
+    if (!r.ok) {
+      const j = await r.json().catch(() => ({}));
+      alert(j.detail || j.error || "下载失败");
+      return;
+    }
+    const blob = await r.blob();
+    const extMap = { pdf: "pdf", docx: "docx", txt: "txt" };
+    const base = (decodeURIComponent(filename) || "识别结果").replace(/\.[^.]+$/, "");
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = base + "-识别结果." + extMap[fmt];
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  } catch (e) {
+    alert("网络错误：" + e.message);
+  }
+}
+
+async function retryTask(taskId, full) {
+  try {
+    const r = await fetch("/api/retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: decodeURIComponent(taskId), full: full })
+    });
+    const j = await r.json();
+    if (!j.ok) alert(j.detail || j.error || "重试失败");
+  } catch (e) { alert("网络错误"); }
+  refreshTasks();
+}
+
+async function cancelTask(taskId) {
+  if (!window.confirm("确定取消该任务吗？已识别的页面会保留，但任务将终止。")) return;
+  try {
+    const r = await fetch("/api/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: decodeURIComponent(taskId) })
+    });
+    const j = await r.json();
+    if (!j.ok) alert(j.detail || j.error || "取消失败");
+  } catch (e) { alert("网络错误"); }
+  refreshTasks();
+}
+
+async function deleteTask(taskId) {
+  if (!window.confirm("确定删除这条记录吗？上传的源文件和识别结果（PDF/DOCX/TXT）将被一并删除，且无法恢复。")) return;
+  try {
+    const r = await fetch("/api/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ task_id: decodeURIComponent(taskId) })
+    });
+    const j = await r.json();
+    if (!j.ok) alert(j.detail || j.error || "删除失败");
+  } catch (e) { alert("网络错误"); }
+  refreshTasks();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+async function refreshTasks() {
+  if (!TOKEN) return;
+  try {
+    const r = await fetch("/api/tasks");
+    if (!r.ok) { setServerBanner(true); return; }
+    setServerBanner(false);
+    const j = await r.json();
+    if (j.ok) renderTasks(j.tasks);
+  } catch (e) { setServerBanner(true); }
+}
+
+function setServerBanner(show) {
+  document.getElementById("serverBanner").classList.toggle("hidden", !show);
+}
+
+function startPolling() {
+  refreshTasks();
+  if (timer) clearInterval(timer);
+  timer = setInterval(refreshTasks, 2500);
+}
+
+// ---------- 初始化 ----------
+(async function init() {
+  if (!TOKEN) return;
+  try {
+    const r = await _origFetch("/api/me", { headers: { "X-Access-Token": TOKEN } });
+    const j = await r.json();
+    if (j.ok && j.user) { CURRENT = j.user; enterMain(); }
+    else localStorage.removeItem("token");
+  } catch (e) { /* 稍后重试登录 */ }
+})();
+</script>
+</body>
+</html>

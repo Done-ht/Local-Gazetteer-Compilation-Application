@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# 运行时生成 / 用户数据（注册用户、上传文件、识别结果）——不入版本库
+data/
+output/
+
+# 本地配置（含讯飞等第三方密钥时绝不入库）；首次使用复制 config.example.json 为 config.json
+config.json
+
+# 构建产物
+build/
+dist/
+
+# PaddleOCR 模型文件（大体积二进制，不入库）
+paddleocr_models/
+*.tar
+
+# 日志与临时文件
+*.log
+_server_test.log
+_test_export/

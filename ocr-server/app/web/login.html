@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>登录 · OCR 识别服务</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft YaHei", system-ui, sans-serif; background: #f0f2f5; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+  .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,.08); padding: 28px 30px; width: 360px; }
+  .card h1 { font-size: 20px; text-align: center; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #8a94a6; text-align: center; margin-bottom: 18px; }
+  .tabs { display: flex; margin-bottom: 16px; border-bottom: 1px solid #eee; }
+  .tabs button { flex: 1; background: none; border: none; padding: 10px 0; font-size: 14px; color: #666; cursor: pointer; border-bottom: 2px solid transparent; }
+  .tabs button.active { color: #1677ff; border-bottom-color: #1677ff; font-weight: 600; }
+  .field { margin-bottom: 14px; }
+  .field label { display: block; font-size: 13px; color: #444; margin-bottom: 6px; }
+  .field input { width: 100%; padding: 9px 12px; border: 1px solid #d9d9d9; border-radius: 6px; font-size: 14px; }
+  .field input:focus { outline: none; border-color: #1677ff; }
+  button.primary { width: 100%; padding: 10px; background: #1677ff; color: #fff; border: none; border-radius: 6px; font-size: 15px; cursor: pointer; }
+  button.primary:hover { opacity: .9; }
+  .hint { font-size: 12px; color: #8a94a6; margin-top: 12px; line-height: 1.6; }
+  .error { color: #cf1322; font-size: 13px; margin-top: 10px; min-height: 18px; text-align: center; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>📄 OCR 识别服务</h1>
+  <div class="sub">登录后使用当前模式的功能</div>
+
+  <div class="tabs">
+    <button id="tabLogin" class="active" onclick="switchTab('login')">登录</button>
+    <button id="tabReg" onclick="switchTab('reg')">注册</button>
+  </div>
+
+  <!-- 登录 -->
+  <div id="panelLogin">
+    <div class="field">
+      <label>用户名</label>
+      <input type="text" id="loginUser" placeholder="用户名" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="loginPass" placeholder="密码" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <button class="primary" onclick="doLogin()">登 录</button>
+  </div>
+
+  <!-- 注册 -->
+  <div id="panelReg" class="hidden">
+    <div class="field">
+      <label>用户名</label>
+      <input type="text" id="regUser" placeholder="2-32 个字符（可中文）" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>密码</label>
+      <input type="password" id="regPass" placeholder="至少 6 位" autocomplete="new-password">
+    </div>
+    <div class="field">
+      <label>确认密码</label>
+      <input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()">
+    </div>
+    <button class="primary" onclick="doRegister()">注 册</button>
+    <div class="hint">开放注册；<b>第一个注册的用户自动成为管理员</b>，之后注册的都是普通用户。</div>
+  </div>
+
+  <div class="error" id="err"></div>
+</div>
+
+<script>
+function switchTab(t) {
+  document.getElementById('tabLogin').classList.toggle('active', t === 'login');
+  document.getElementById('tabReg').classList.toggle('active', t === 'reg');
+  document.getElementById('panelLogin').classList.toggle('hidden', t !== 'login');
+  document.getElementById('panelReg').classList.toggle('hidden', t !== 'reg');
+  document.getElementById('err').textContent = '';
+}
+
+async function api(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || data.error || ('请求失败 (' + res.status + ')'));
+  return data;
+}
+
+async function doLogin() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const username = document.getElementById('loginUser').value.trim();
+  const password = document.getElementById('loginPass').value;
+  if (!username || !password) { err.textContent = '请输入用户名和密码'; return; }
+  try {
+    const data = await api('/api/login', { username, password });
+    localStorage.setItem('token', data.token);
+    localStorage.setItem('username', data.user.username);
+    location.href = '/';
+  } catch (e) { err.textContent = e.message; }
+}
+
+async function doRegister() {
+  const err = document.getElementById('err');
+  err.textContent = '';
+  const username = document.getElementById('regUser').value.trim();
+  const password = document.getElementById('regPass').value;
+  const password2 = document.getElementById('regPass2').value;
+  if (!username || !password) { err.textContent = '请输入用户名和密码'; return; }
+  if (password !== password2) { err.textContent = '两次输入的密码不一致'; return; }
+  try {
+    const data = await api('/api/register', { username, password });
+    if (data.first_user) {
+      alert('注册成功！您是第一个注册的用户，已成为管理员。请登录。');
+    } else {
+      alert('注册成功！请登录。');
+    }
+    switchTab('login');
+    document.getElementById('loginUser').value = username;
+    document.getElementById('loginPass').value = '';
+  } catch (e) { err.textContent = e.message; }
+}
+</script>
+</body>
+</html>
