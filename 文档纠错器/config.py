@@ -20,7 +20,7 @@ def _user_config_dir() -> str:
     非 Windows 回退到 ~/.config/docproof。目录不存在时自动创建。
 
     仅用于服务端配置（_server_config.json）与日志；用户数据
-    （_users.json / _sessions.json）见 USER_DATA_DIR，与 biaoshifu 共享。
+    （_users.json / _sessions.json）见 USER_DATA_DIR。
     """
     appdata = os.environ.get("APPDATA")
     if appdata:
