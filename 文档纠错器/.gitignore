@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+myenv/
+
+# 构建产物
+build/
+dist/
+dist_client/
+dist_server/
+*.exe
+
+# 数据与测试输出（可能含真实文档内容）
+test_output/
+*.docx
+
+# 工具元数据
+.reasonix/

@@ -1,0 +1,1801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocProof 文档纠错</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; font-family: "Microsoft YaHei", "Segoe UI", sans-serif; font-size: 14px; }
+  body { background: #f5f6f8; color: #1f2937; display: flex; flex-direction: column; }
+
+  /* 顶部工具栏 */
+  .toolbar {
+    background: #1e3a5f; color: #fff; padding: 8px 12px;
+    display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  }
+  .toolbar h1 { font-size: 16px; font-weight: 600; margin-right: 16px; }
+  .toolbar button {
+    background: #2d4a73; color: #fff; border: 1px solid #3b5278;
+    padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    transition: background 0.15s;
+  }
+  .toolbar button:hover:not(:disabled) { background: #3b5278; }
+  .toolbar button:disabled { opacity: 0.45; cursor: not-allowed; }
+  .toolbar button.primary { background: #2563eb; border-color: #1d4ed8; }
+  .toolbar button.primary:hover:not(:disabled) { background: #1d4ed8; }
+  .toolbar button.danger { background: #b91c1c; border-color: #991b1b; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar .status-pill {
+    background: #374151; padding: 4px 10px; border-radius: 12px;
+    font-size: 12px; color: #d1d5db;
+  }
+  .toolbar .status-pill.warn { background: #b45309; color: #fef3c7; }
+  .toolbar .status-pill.ok { background: #15803d; color: #f0fdf4; }
+  .toolbar label.ocr-toggle {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    padding: 4px 10px; border-radius: 4px; background: #2d4a73; font-size: 13px;
+  }
+  .toolbar label.ocr-toggle input { margin: 0; }
+
+  /* 主体：左侧预览 + 右侧错误面板 */
+  .main {
+    flex: 1; display: flex; overflow: hidden;
+  }
+  .preview {
+    flex: 3; background: #fff; border-right: 1px solid #e5e7eb;
+    overflow: auto; padding: 24px 32px;
+    position: relative;
+  }
+  .preview.drag-over {
+    background: #eff6ff; outline: 2px dashed #2563eb; outline-offset: -8px;
+  }
+  .preview .page-header {
+    color: #6b7280; font-size: 12px; margin-bottom: 12px;
+    border-bottom: 1px solid #f3f4f6; padding-bottom: 8px;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .preview .page-header .swap-file {
+    color: #2563eb; cursor: pointer; font-size: 12px;
+    text-decoration: underline; padding: 2px 6px;
+  }
+  .preview .page-header .swap-file:hover { color: #1d4ed8; }
+  .preview .page-text {
+    line-height: 1.85; font-size: 15px; white-space: pre-wrap; word-wrap: break-word;
+    color: #111827;
+  }
+  .preview .page-text .err-mark {
+    background: #fef08a; border-bottom: 2px solid #ca8a04;
+    padding: 0 2px; cursor: pointer; border-radius: 2px;
+  }
+  .preview .page-text .err-mark.uncertain {
+    background: #e5e7eb; border-bottom-color: #9ca3af; color: #6b7280;
+  }
+  .preview .page-text .err-mark.accepted {
+    background: #bbf7d0; border-bottom-color: #16a34a;
+  }
+  .preview .page-text .err-mark.active {
+    outline: 2px solid #2563eb; outline-offset: 1px;
+  }
+  .preview .empty-hint {
+    color: #9ca3af; text-align: center; margin-top: 80px; font-size: 14px;
+  }
+
+  .error-panel {
+    flex: 2; background: #fafbfc; display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .error-tabs {
+    display: flex; border-bottom: 1px solid #e5e7eb; background: #fff;
+  }
+  .error-tabs button {
+    flex: 1; padding: 10px; background: #fff; border: none; cursor: pointer;
+    font-size: 13px; color: #6b7280; border-bottom: 2px solid transparent;
+  }
+  .error-tabs button.active { color: #2563eb; border-bottom-color: #2563eb; }
+  .error-tabs button .count {
+    background: #e5e7eb; color: #4b5563; padding: 1px 7px;
+    border-radius: 10px; font-size: 11px; margin-left: 4px;
+  }
+
+  .error-filters {
+    display: flex; gap: 6px; padding: 8px 12px; background: #fff;
+    border-bottom: 1px solid #e5e7eb; flex-wrap: wrap;
+  }
+  .error-filters select, .error-filters input {
+    padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 3px;
+    font-size: 12px; background: #fff;
+  }
+  /* 跳页下拉器：沿用 status-pill 外观但可点击 */
+  select#page-jumper {
+    appearance: none; cursor: pointer; font-size: 12px;
+    border: 1px solid #3b5278; padding: 4px 10px;
+  }
+  select#page-jumper:disabled { cursor: not-allowed; opacity: 0.7; }
+  .error-filters label.filter-toggle {
+    display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+    font-size: 12px; color: #374151; user-select: none;
+  }
+  .error-filters label.filter-toggle input { margin: 0; }
+
+  .error-list { flex: 1; overflow: auto; padding: 4px 0; }
+  .error-item {
+    padding: 8px 12px; border-bottom: 1px solid #f3f4f6; cursor: pointer;
+    border-left: 3px solid transparent;
+  }
+  .error-item:hover { background: #f9fafb; }
+  .error-item.active { background: #eff6ff; border-left-color: #2563eb; }
+  .error-item.uncertain { opacity: 0.7; }
+  .error-item.accepted { background: #f0fdf4; border-left-color: #16a34a; }
+  .error-item .row1 {
+    display: flex; gap: 8px; align-items: baseline; margin-bottom: 4px;
+  }
+  .error-item .type-tag {
+    font-size: 11px; padding: 1px 6px; border-radius: 3px; color: #fff;
+  }
+  .type-tag.错别字 { background: #dc2626; }
+  .type-tag.语法 { background: #7c3aed; }
+  .type-tag.标点 { background: #ea580c; }
+  .type-tag.逻辑 { background: #0891b2; }
+  .error-item .confidence-tag {
+    font-size: 11px; padding: 1px 6px; border-radius: 3px;
+    background: #e5e7eb; color: #4b5563;
+  }
+  .confidence-tag.明确 { background: #dcfce7; color: #15803d; }
+  .confidence-tag.存疑 { background: #fee2e2; color: #b91c1c; }
+  .error-item .page-no { color: #9ca3af; font-size: 11px; margin-left: auto; }
+  .error-item .orig { color: #b91c1c; text-decoration: line-through; font-weight: 500; }
+  .error-item .arrow { color: #9ca3af; margin: 0 4px; }
+  .error-item .sugg { color: #15803d; font-weight: 500; }
+  .error-item .reason {
+    color: #6b7280; font-size: 12px; line-height: 1.5; margin-top: 4px;
+    word-break: break-all;
+  }
+  .error-item .actions {
+    display: flex; gap: 6px; margin-top: 6px;
+  }
+  .error-item .actions button {
+    background: #fff; border: 1px solid #d1d5db; padding: 3px 10px;
+    border-radius: 3px; cursor: pointer; font-size: 12px; color: #374151;
+  }
+  .error-item .actions button:hover { background: #f3f4f6; }
+  .error-item .actions button.accept { color: #15803d; border-color: #16a34a; }
+  .error-item .actions button.accept:hover { background: #f0fdf4; }
+  .error-item .actions button.ignore { color: #6b7280; }
+  .error-item .actions button.undo { color: #b45309; border-color: #d97706; }
+
+  /* 底部：进度 + 日志 */
+  .bottom {
+    background: #1f2937; color: #d1d5db; max-height: 180px;
+    display: flex; flex-direction: column;
+  }
+  .bottom .progress-bar {
+    height: 4px; background: #374151; overflow: hidden;
+  }
+  .bottom .progress-bar .fill {
+    height: 100%; background: #3b82f6; width: 0; transition: width 0.3s;
+  }
+  .bottom .log {
+    flex: 1; overflow: auto; padding: 6px 12px; font-family: Consolas, monospace;
+    font-size: 12px; line-height: 1.5;
+  }
+  .bottom .log .line { color: #9ca3af; }
+  .bottom .log .line.info { color: #d1d5db; }
+  .bottom .log .line.warn { color: #fbbf24; }
+  .bottom .log .line.error { color: #f87171; }
+  .bottom .log .line.success { color: #34d399; }
+  .bottom .toggle {
+    background: #374151; color: #d1d5db; border: none; padding: 4px 12px;
+    cursor: pointer; font-size: 11px; text-align: left;
+  }
+
+  /* 设置对话框 */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.4);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: #fff; border-radius: 6px; padding: 24px;
+    width: 560px; max-width: 90vw; max-height: 90vh; overflow: auto;
+  }
+  .modal h2 { font-size: 18px; margin-bottom: 16px; color: #1f2937; }
+  .modal .form-row { margin-bottom: 12px; }
+  .modal .form-row label {
+    display: block; font-size: 13px; color: #374151; margin-bottom: 4px;
+  }
+  .modal .form-row input, .modal .form-row select, .modal .form-row textarea {
+    width: 100%; padding: 6px 8px; border: 1px solid #d1d5db;
+    border-radius: 3px; font-size: 13px; font-family: inherit;
+  }
+  .modal .form-row textarea { min-height: 80px; resize: vertical; }
+  .modal .form-row .hint { color: #9ca3af; font-size: 11px; margin-top: 3px; }
+  .modal .form-row input[type="checkbox"] { width: auto; }
+  .modal .checkbox-row {
+    display: flex; align-items: center; gap: 6px; margin-bottom: 8px;
+  }
+  .modal .checkbox-row label { margin: 0; }
+  .modal .actions {
+    display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+  }
+  .modal .actions button {
+    padding: 6px 16px; border-radius: 4px; cursor: pointer; font-size: 13px;
+    border: 1px solid #d1d5db; background: #fff; color: #374151;
+  }
+  .modal .actions button.primary { background: #2563eb; color: #fff; border-color: #1d4ed8; }
+
+  /* 拖放区 */
+  .drop-zone {
+    border: 2px dashed #d1d5db; border-radius: 6px; padding: 60px 20px;
+    text-align: center; color: #6b7280; margin: 24px; background: #fff;
+    transition: all 0.2s;
+  }
+  .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; color: #2563eb; }
+  .drop-zone .icon { font-size: 36px; margin-bottom: 12px; }
+  .drop-zone .main-text { font-size: 16px; margin-bottom: 4px; color: #1f2937; }
+  .drop-zone .sub-text { font-size: 12px; }
+  .drop-zone input[type="file"] { display: none; }
+
+  /* Toast */
+  .toast-container {
+    position: fixed; top: 12px; right: 12px; z-index: 200;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .toast {
+    background: #1f2937; color: #f9fafb; padding: 10px 16px; border-radius: 4px;
+    font-size: 13px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    animation: slideIn 0.2s ease-out; max-width: 380px;
+  }
+  .toast.success { background: #15803d; }
+  .toast.error { background: #b91c1c; }
+  .toast.warn { background: #b45309; }
+  @keyframes slideIn {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .hidden { display: none !important; }
+
+  /* 登录遮罩 */
+  .login-overlay {
+    position: fixed; inset: 0; background: rgba(15, 23, 42, 0.92);
+    z-index: 500; display: flex; align-items: center; justify-content: center;
+  }
+  .login-box {
+    background: #fff; padding: 32px 40px; border-radius: 8px; width: 420px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  }
+  .login-box h2 { margin-bottom: 8px; color: #1e3a5f; }
+  .login-box .hint { color: #6b7280; font-size: 12px; margin-bottom: 20px; }
+  .login-box input {
+    width: 100%; padding: 10px 12px; border: 1px solid #d1d5db;
+    border-radius: 4px; font-size: 14px; font-family: monospace;
+    margin-bottom: 12px;
+  }
+  .login-box button {
+    width: 100%; padding: 10px; background: #2563eb; color: #fff;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+  }
+  .login-box button:hover { background: #1d4ed8; }
+  .login-box .err { color: #b91c1c; font-size: 12px; margin-top: 8px; min-height: 16px; }
+  .login-box .toggle-row { text-align: center; margin-top: 14px; }
+  .login-box .toggle-row a { color: #2563eb; font-size: 13px; cursor: pointer; text-decoration: none; }
+  .login-box .toggle-row a:hover { text-decoration: underline; }
+
+  /* 用户管理对话框 */
+  .user-row {
+    display: flex; align-items: center; gap: 8px; padding: 8px 0;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  .user-row .name { flex: 1; font-size: 13px; }
+  .user-row .badge {
+    background: #dbeafe; color: #1e40af; padding: 2px 8px; border-radius: 10px;
+    font-size: 11px;
+  }
+  .user-row .badge.admin { background: #fee2e2; color: #991b1b; }
+  .user-row button {
+    padding: 4px 10px; font-size: 12px; border: 1px solid #d1d5db;
+    background: #fff; border-radius: 4px; cursor: pointer;
+  }
+  .user-row button:hover { background: #f3f4f6; }
+  .user-row button.danger { color: #b91c1c; border-color: #fecaca; }
+  .token-display {
+    background: #f9fafb; padding: 8px 12px; border-radius: 4px;
+    font-family: monospace; font-size: 12px; word-break: break-all;
+    margin: 8px 0; border: 1px solid #e5e7eb;
+  }
+</style>
+</head>
+<body>
+
+<!-- 登录遮罩（登录 / 注册切换） -->
+<div class="login-overlay" id="login-overlay">
+  <div class="login-box">
+    <h2 id="login-title">DocProof 登录</h2>
+    <div class="hint" id="login-hint">请输入用户名和密码。没有账号可直接注册。</div>
+    <input type="text" id="login-username" placeholder="用户名" autocomplete="username">
+    <input type="password" id="login-password" placeholder="密码" autocomplete="current-password">
+    <input type="password" id="login-password2" placeholder="确认密码" autocomplete="new-password" class="hidden">
+    <button id="login-btn">登录</button>
+    <div class="err" id="login-err"></div>
+    <div class="toggle-row" id="login-toggle">
+      <a href="javascript:void(0)" id="login-toggle-link">没有账号？立即注册</a>
+    </div>
+  </div>
+</div>
+
+<!-- 顶部工具栏 -->
+<div class="toolbar">
+  <h1>DocProof 文档纠错</h1>
+  <button id="btn-upload" class="primary">📁 上传文件</button>
+  <button id="btn-start" disabled>▶ 开始纠错</button>
+  <button id="btn-autopilot-accept" disabled title="自动校验每一页并采纳所有「明确」错误，存疑保留">🤖 托管·采纳明确</button>
+  <button id="btn-autopilot-check" disabled title="自动校验每一页，不采纳任何错误">🤖 托管·仅校验</button>
+  <label class="ocr-toggle" title="OCR 识别纠错模式：专门排查形近字、漏字、乱码等 OCR 特有错误">
+    <input type="checkbox" id="chk-ocr"> 图片识别纠错
+  </label>
+  <span class="spacer"></span>
+  <button id="btn-prev" disabled>◀ 上一页</button>
+  <select id="page-jumper" class="status-pill" disabled title="跳转到指定页">
+    <option>未加载文档</option>
+  </select>
+  <button id="btn-next" disabled>下一页 ▶</button>
+  <button id="btn-export" disabled>💾 导出</button>
+  <button id="btn-settings">⚙ 设置</button>
+  <button id="btn-users" class="hidden">👥 用户管理</button>
+  <span id="user-pill" class="status-pill" style="background:#374151" title="双击可退出登录">未登录</span>
+  <span id="conn-status" class="status-pill warn">连接中…</span>
+</div>
+
+<!-- 主体 -->
+<div class="main">
+  <!-- 左侧预览 -->
+  <div class="preview" id="preview">
+    <div class="drop-zone" id="drop-zone">
+      <div class="icon">📄</div>
+      <div class="main-text">点击或拖放文件到此处上传</div>
+      <div class="sub-text">支持 docx / txt / pdf / jpg / png / bmp（扫描版 PDF 与图片走讯飞 OCR）</div>
+    </div>
+  </div>
+
+  <!-- 右侧错误面板 -->
+  <div class="error-panel">
+    <div class="error-tabs">
+      <button class="active" data-tab="unconfirmed">
+        未确认 <span class="count" id="count-unconfirmed">0</span>
+      </button>
+      <button data-tab="confirmed">
+        已确认 <span class="count" id="count-confirmed">0</span>
+      </button>
+    </div>
+    <div class="error-filters" id="filters">
+      <select id="filter-type">
+        <option value="">全部类型</option>
+        <option value="错别字">错别字</option>
+        <option value="语法">语法</option>
+        <option value="标点">标点</option>
+        <option value="逻辑">逻辑</option>
+      </select>
+      <select id="filter-confidence">
+        <option value="">全部置信</option>
+        <option value="明确">明确</option>
+        <option value="存疑">存疑</option>
+      </select>
+      <label class="filter-toggle" title="勾选时仅显示当前页的错误，取消则显示全部页">
+        <input type="checkbox" id="filter-current-page" checked> 仅本页
+      </label>
+      <button id="btn-accept-all" style="margin-left:auto">一键采纳筛选</button>
+    </div>
+    <div class="error-list" id="error-list">
+      <div class="empty-hint" style="margin-top:60px">尚无错误，请先上传文件并开始纠错</div>
+    </div>
+  </div>
+</div>
+
+<!-- 底部：进度 + 日志 -->
+<div class="bottom">
+  <div class="progress-bar"><div class="fill" id="progress-fill"></div></div>
+  <button class="toggle" id="btn-toggle-log">控制台 ▲</button>
+  <div class="log" id="log"></div>
+</div>
+
+<!-- 设置对话框 -->
+<div class="modal-overlay" id="settings-modal">
+  <div class="modal">
+    <h2>设置</h2>
+
+    <div class="form-row">
+      <label>AI 服务商</label>
+      <select id="set-provider"></select>
+    </div>
+    <div class="form-row">
+      <label>API Key（DeepSeek / OpenAI 兼容服务商）</label>
+      <input type="password" id="set-llm-key" placeholder="sk-...">
+      <div class="hint" id="llm-key-hint"></div>
+    </div>
+    <div class="form-row">
+      <label>Base URL</label>
+      <input type="text" id="set-base-url" placeholder="https://api.deepseek.com">
+    </div>
+    <div class="form-row">
+      <label>模型</label>
+      <input type="text" id="set-model" placeholder="deepseek-v4-flash">
+    </div>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb">
+    <div class="form-row">
+      <label>讯飞 OCR 凭据（识别图片/扫描版 PDF 用）</label>
+      <input type="text" id="set-xf-appid" placeholder="APPID">
+      <input type="password" id="set-xf-key" placeholder="APIKey" style="margin-top:4px">
+      <input type="password" id="set-xf-secret" placeholder="APISecret" style="margin-top:4px">
+      <div class="hint" id="xf-hint"></div>
+    </div>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb">
+    <div class="form-row">
+      <label>Token 上限（超过后熔断）</label>
+      <input type="number" id="set-token-limit" min="1000" step="100000" value="1000000">
+    </div>
+    <div class="checkbox-row">
+      <input type="checkbox" id="set-review" checked>
+      <label for="set-review">开启二次复核（每块错误再交叉核对一轮，约翻倍 token）</label>
+    </div>
+    <div class="form-row">
+      <label>复核前/后文摘要字数</label>
+      <input type="number" id="set-review-context" min="100" max="5000" step="100" value="800">
+    </div>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb">
+    <div class="form-row">
+      <label>预置规则开关（默认关闭 = 视为可接受，不报告）</label>
+      <div id="preset-switches"></div>
+    </div>
+    <div class="form-row">
+      <label>自定义规则（每行一条，将作为附加要求注入校对）</label>
+      <textarea id="set-custom-rules" placeholder="示例：&#10;年份统一用四位数字&#10;机构名首次出现用全称"></textarea>
+    </div>
+
+    <div class="actions">
+      <button id="settings-cancel">取消</button>
+      <button id="settings-save" class="primary">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- 用户管理对话框（仅管理员） -->
+<div class="modal-overlay" id="users-modal">
+  <div class="modal">
+    <h2>用户管理</h2>
+    <div class="form-row">
+      <label>新增用户</label>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <input type="text" id="new-user-name" placeholder="用户名（登录用，不能含空格）" style="flex:1;min-width:160px">
+        <input type="password" id="new-user-pwd" placeholder="初始密码（至少 6 位）" style="flex:1;min-width:140px">
+        <label style="display:flex;align-items:center;gap:4px;font-size:12px">
+          <input type="checkbox" id="new-user-admin"> 管理员
+        </label>
+        <button id="btn-add-user" class="primary">添加</button>
+      </div>
+    </div>
+    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb">
+    <div class="form-row">
+      <label>用户列表</label>
+      <div id="user-list"></div>
+    </div>
+    <div class="actions">
+      <button id="users-close">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast-container" id="toasts"></div>
+
+<!-- 持久化的隐藏 file-input：放在 body 层，避免首次上传后 drop-zone 被替换导致无法再次选文件 -->
+<input type="file" id="file-input" accept=".docx,.txt,.pdf,.jpg,.jpeg,.png,.bmp" style="display:none">
+
+<script>
+// ==================== 全局状态 ====================
+const State = {
+  session: null,            // {session_id, file_type, pages, page_count}
+  pages: [],                // [{page_num, text}]
+  currentPageIdx: 0,        // 当前预览的页索引（指向 orderedPnums）
+  orderedPnums: [],         // 排序后的页码列表
+  errors: [],               // 所有检出的错误（含状态）
+  accepted: {},             // errorId -> correction {page_num, start, end, replacement}
+  activeErrorId: null,      // 当前高亮的错误
+  config: null,             // 服务器配置
+  busy: false,              // 是否正在纠错/加载
+  abortController: null,    // 取消纠错请求
+  filter: {type: "", confidence: "", currentPageOnly: true},
+  user: null,               // 当前登录用户 {username, is_admin, role}
+  autoPilot: {running: false, mode: null, stopRequested: false},
+};
+
+// 会话 token 持久化 key（与 session 恢复分开存储，token 失效不影响 session 缓存）
+const TOKEN_KEY = "docproof_session_v1";
+// 兼容：清理旧版 access_token 持久化（一次性）
+(function cleanupLegacyToken() {
+  try { localStorage.removeItem("docproof_token_v1"); } catch (e) {}
+})();
+
+// ==================== 工具函数 ====================
+function $(id) { return document.getElementById(id); }
+function toast(msg, type = "info", duration = 3000) {
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), duration);
+}
+function log(msg, type = "info") {
+  const line = document.createElement("div");
+  line.className = "line " + type;
+  const ts = new Date().toTimeString().slice(0, 8);
+  line.textContent = `[${ts}] ${msg}`;
+  $("log").appendChild(line);
+  $("log").scrollTop = $("log").scrollHeight;
+}
+function setProgress(pct) { $("progress-fill").style.width = pct + "%"; }
+function setBusy(busy) {
+  State.busy = busy;
+  const ap = State.autoPilot;
+  const navLocked = busy && !ap.running;  // 托管中不锁翻页，允许用户自由浏览
+  $("btn-start").disabled = busy || !State.session || ap.running;
+  $("btn-upload").disabled = busy;
+  $("btn-export").disabled = busy || Object.keys(State.accepted).length === 0;
+  $("btn-prev").disabled = navLocked || State.currentPageIdx === 0;
+  $("btn-next").disabled = navLocked || State.currentPageIdx >= State.orderedPnums.length - 1;
+  $("page-jumper").disabled = navLocked || !State.orderedPnums.length;
+  // 托管按钮：未运行时正常启用/禁用，运行中变为「停止」
+  if (ap.running) {
+    $("btn-autopilot-accept").disabled = ap.mode !== "accept_clear";
+    $("btn-autopilot-check").disabled = ap.mode !== "check_only";
+    $("btn-autopilot-accept").textContent = ap.mode === "accept_clear" ? "⏹ 停止托管" : "🤖 托管·采纳明确";
+    $("btn-autopilot-check").textContent = ap.mode === "check_only" ? "⏹ 停止托管" : "🤖 托管·仅校验";
+  } else {
+    $("btn-autopilot-accept").disabled = busy || !State.session;
+    $("btn-autopilot-check").disabled = busy || !State.session;
+    $("btn-autopilot-accept").textContent = "🤖 托管·采纳明确";
+    $("btn-autopilot-check").textContent = "🤖 托管·仅校验";
+  }
+}
+
+// ==================== API 调用 ====================
+function getToken() { return localStorage.getItem(TOKEN_KEY) || ""; }
+function authHeaders(extra) {
+  const h = Object.assign({}, extra || {});
+  const t = getToken();
+  if (t) h["Authorization"] = "Bearer " + t;
+  return h;
+}
+
+// 401/403 时自动登出（token 失效或权限不足）
+function handleAuthError(resp) {
+  if (resp.status === 401 || resp.status === 403) {
+    localStorage.removeItem(TOKEN_KEY);
+    showLogin();
+    return true;
+  }
+  return false;
+}
+
+async function apiGet(path) {
+  const resp = await fetch(path, {headers: authHeaders()});
+  if (handleAuthError(resp)) throw new Error("登录已失效，请重新登录");
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({error: resp.statusText}));
+    const err = new Error(data.error || `HTTP ${resp.status}`);
+    err.httpStatus = resp.status;  // 供托管循环判断是否可重试
+    throw err;
+  }
+  return resp.json();
+}
+async function apiPost(path, body) {
+  const resp = await fetch(path, {
+    method: "POST",
+    headers: authHeaders({"Content-Type": "application/json"}),
+    body: JSON.stringify(body),
+  });
+  if (handleAuthError(resp)) throw new Error("登录已失效，请重新登录");
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({error: resp.statusText}));
+    const err = new Error(data.error || `HTTP ${resp.status}`);
+    err.httpStatus = resp.status;  // 供托管循环判断是否可重试
+    throw err;
+  }
+  return resp.json();
+}
+async function apiDelete(path) {
+  const resp = await fetch(path, {method: "DELETE", headers: authHeaders()});
+  if (handleAuthError(resp)) throw new Error("登录已失效，请重新登录");
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({error: resp.statusText}));
+    const err = new Error(data.error || `HTTP ${resp.status}`);
+    err.httpStatus = resp.status;  // 供托管循环判断是否可重试
+    throw err;
+  }
+  return resp.json();
+}
+
+async function uploadFile(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  const resp = await fetch("/api/upload", {
+    method: "POST",
+    headers: authHeaders(),  // 注意：multipart 不要手动设 Content-Type，浏览器自动加 boundary
+    body: fd,
+  });
+  if (handleAuthError(resp)) throw new Error("登录已失效，请重新登录");
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({error: resp.statusText}));
+    throw new Error(data.error || `上传失败 HTTP ${resp.status}`);
+  }
+  return resp.json();
+}
+
+// NDJSON 流式读取
+async function proofreadStream(payload, onEvent) {
+  State.abortController = new AbortController();
+  const resp = await fetch("/api/proofread", {
+    method: "POST",
+    headers: authHeaders({"Content-Type": "application/json"}),
+    body: JSON.stringify(payload),
+    signal: State.abortController.signal,
+  });
+  if (handleAuthError(resp)) throw new Error("登录已失效，请重新登录");
+  if (!resp.ok) {
+    const data = await resp.json().catch(() => ({error: resp.statusText}));
+    const err = new Error(data.error || `HTTP ${resp.status}`);
+    err.httpStatus = resp.status;  // 供托管循环判断是否可重试
+    throw err;
+  }
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, {stream: true});
+    const lines = buffer.split("\n");
+    buffer = lines.pop();  // 保留最后未完整的一行
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try { onEvent(JSON.parse(line)); }
+      catch (e) { console.warn("NDJSON 解析失败:", line, e); }
+    }
+  }
+  if (buffer.trim()) {
+    try { onEvent(JSON.parse(buffer)); } catch (e) { /* ignore */ }
+  }
+}
+
+// ==================== 健康检查 ====================
+async function checkHealth() {
+  try {
+    const h = await apiGet("/api/health");
+    const pill = $("conn-status");
+    if (h.llm_configured) {
+      pill.className = "status-pill ok";
+      pill.textContent = `✓ ${h.model || "已连接"}`;
+    } else {
+      pill.className = "status-pill warn";
+      pill.textContent = "未配置 API Key";
+    }
+    return h;
+  } catch (e) {
+    $("conn-status").className = "status-pill warn";
+    $("conn-status").textContent = "连接失败";
+    return null;
+  }
+}
+
+// ==================== 加载配置（用于设置对话框） ====================
+async function loadConfig() {
+  State.config = await apiGet("/api/config");
+  return State.config;
+}
+
+// ==================== 上传文件 ====================
+const SESSION_KEY = "docproof_uploaded_doc_v1";  // localStorage 键名（必须与 TOKEN_KEY 不同，避免互相覆盖）
+
+function saveSessionToLocal() {
+  if (!State.session) return;
+  try {
+    localStorage.setItem(SESSION_KEY, JSON.stringify({
+      session_id: State.session.session_id,
+      file_type: State.session.file_type,
+      original_filename: State.session.original_filename || "",
+      has_tables: State.session.has_tables || false,
+      page_count: State.session.page_count,
+      // pages 文本一并缓存，刷新后即使服务端会话已过期也能展示已加载内容
+      // （但导出会失败，需重新上传）
+      pages: State.pages,
+      // 校验进度持久化：错误列表 + 已采纳修正
+      errors: State.errors,
+      accepted: State.accepted,
+    }));
+  } catch (e) { /* localStorage 配额可能不足，忽略 */ }
+}
+
+function clearSessionLocal() {
+  try { localStorage.removeItem(SESSION_KEY); } catch (e) { /* ignore */ }
+}
+
+// 把 State.accepted 中的修正重新应用到 State.pages（恢复进度时用）
+// 服务端返回的 pages 是原文，需按 accepted 倒序应用，使采纳后的文本状态恢复
+function applyAcceptedToPages() {
+  // 按页分组
+  const grouped = {};
+  for (const id in State.accepted) {
+    const c = State.accepted[id];
+    if (!c || !c.page_num) continue;
+    (grouped[c.page_num] = grouped[c.page_num] || []).push(c);
+  }
+  for (const pn in grouped) {
+    const page = State.pages.find(p => p.page_num === parseInt(pn));
+    if (!page) continue;
+    // 按起始偏移倒序，避免前一条修改影响后一条的偏移
+    const sorted = grouped[pn].sort((a,b) => b.start - a.start);
+    for (const c of sorted) {
+      // 偏移越界保护：原文长度不足时跳过该条
+      if (c.start < 0 || c.end > page.text.length || c.start > c.end) continue;
+      page.text = page.text.slice(0, c.start) + c.replacement + page.text.slice(c.end);
+    }
+  }
+}
+
+async function restoreSessionFromLocal() {
+  const saved = localStorage.getItem(SESSION_KEY);
+  if (!saved) return false;
+  let data;
+  try { data = JSON.parse(saved); }
+  catch (e) { clearSessionLocal(); return false; }
+  if (!data || !data.session_id) { clearSessionLocal(); return false; }
+  // 向服务端确认会话是否还活着
+  try {
+    const resp = await fetch(`/api/session/${data.session_id}`, {headers: authHeaders()});
+    if (!resp.ok) {
+      // 服务端会话已过期：清掉本地缓存，让用户重新上传
+      clearSessionLocal();
+      log("上次会话已过期，请重新上传文件", "warn");
+      return false;
+    }
+    const sess = await resp.json();
+    State.session = sess;
+    State.pages = sess.pages;  // 服务端返回的是原文
+    State.orderedPnums = State.pages.map(p => p.page_num).sort((a,b) => a-b);
+    State.currentPageIdx = 0;
+    // 恢复校验进度：错误列表 + 已采纳修正
+    State.errors = Array.isArray(data.errors) ? data.errors : [];
+    State.accepted = (data.accepted && typeof data.accepted === "object") ? data.accepted : {};
+    // 把已采纳的修正重新应用到服务端返回的原文上（按页分组，每页按偏移倒序应用）
+    applyAcceptedToPages();
+    State.activeErrorId = null;
+    renderPage();
+    renderErrorList();
+    updateCounts();
+    setBusy(false);
+    const accCount = Object.keys(State.accepted).length;
+    log(`已恢复上次会话: ${sess.original_filename || ""}（${sess.page_count} 页，${State.errors.length} 条错误，已采纳 ${accCount} 条）`, "success");
+    toast(`已恢复上次会话${accCount ? `（含 ${accCount} 条已采纳）` : ""}`, "success");
+    return true;
+  } catch (e) {
+    clearSessionLocal();
+    return false;
+  }
+}
+
+async function onFileSelected(file) {
+  if (!file) return;
+  setBusy(true);
+  log(`开始上传: ${file.name}（${(file.size/1024).toFixed(1)} KB）`);
+  setProgress(5);
+  try {
+    const data = await uploadFile(file);
+    State.session = data;
+    State.pages = data.pages;
+    State.orderedPnums = State.pages.map(p => p.page_num).sort((a,b) => a-b);
+    State.currentPageIdx = 0;
+    State.errors = [];
+    State.accepted = {};
+    State.activeErrorId = null;
+    setProgress(100);
+    log(`上传成功: ${data.page_count} 页，类型 ${data.file_type}`, "success");
+    if (data.has_tables) log("提示: 该 docx 含表格，表格内容已纳入校对", "info");
+    renderPage();
+    renderErrorList();
+    updateCounts();
+    setBusy(false);
+    $("btn-export").disabled = true;
+    toast(`已加载 ${data.page_count} 页文档`, "success");
+    // 保存到 localStorage 便于刷新后恢复
+    saveSessionToLocal();
+  } catch (e) {
+    log(`上传失败: ${e.message}`, "error");
+    toast(e.message, "error");
+  } finally {
+    setBusy(false);
+    setTimeout(() => setProgress(0), 500);
+  }
+}
+
+// ==================== 渲染：当前页预览 ====================
+function currentPage() {
+  if (!State.orderedPnums.length) return null;
+  const pn = State.orderedPnums[State.currentPageIdx];
+  return State.pages.find(p => p.page_num === pn);
+}
+
+function renderPage() {
+  const page = currentPage();
+  const previewEl = $("preview");
+  if (!page) {
+    previewEl.innerHTML = `<div class="empty-hint">未加载文档</div>`;
+    updatePageJumper();
+    return;
+  }
+  // 当前页错误（未忽略、未accepted的也展示）
+  const pageErrors = State.errors.filter(
+    e => e.page_num === page.page_num && e.status !== "ignored"
+  );
+  // 在原文上按偏移切分，再分段 escapeHtml——避免 escapeHtml 改变长度导致 offset 失效
+  // （原文含 & < > " ' 时 escapeHtml 后长度变长，offset 会指向错误位置，mx.docx 特有错位根因）
+  const sorted = [...pageErrors].sort((a,b) => a.offset_start - b.offset_start);
+  let html = "";
+  let cursor = 0;
+  for (const err of sorted) {
+    if (err.offset_start < cursor || err.offset_end > page.text.length || err.offset_end < err.offset_start) continue;
+    html += escapeHtml(page.text.slice(cursor, err.offset_start));
+    const cls = ["err-mark"];
+    if (err.confidence === "存疑") cls.push("uncertain");
+    if (State.accepted[err.id]) cls.push("accepted");
+    if (State.activeErrorId === err.id) cls.push("active");
+    const title = `${err.error_type}｜${err.original} → ${err.suggestion}\\n${err.reason}`;
+    html += `<span class="${cls.join(" ")}" data-err-id="${err.id}" title="${escapeAttr(title)}">${escapeHtml(page.text.slice(err.offset_start, err.offset_end))}</span>`;
+    cursor = err.offset_end;
+  }
+  html += escapeHtml(page.text.slice(cursor));
+  previewEl.innerHTML = `
+    <div class="page-header">
+      <span>第 ${page.page_num} 页 / 共 ${State.orderedPnums.length} 页</span>
+      <span>${page.text.length} 字</span>
+      <span class="swap-file" id="swap-file" title="上传新文件替换当前文档">📁 切换文件</span>
+    </div>
+    <div class="page-text">${html}</div>
+  `;
+  // 切换文件按钮
+  const swap = $("swap-file");
+  if (swap) swap.addEventListener("click", () => $("file-input").click());
+  // 点击高亮错误 → 跳转错误列表
+  previewEl.querySelectorAll(".err-mark").forEach(el => {
+    el.addEventListener("click", () => {
+      const id = el.dataset.errId;
+      State.activeErrorId = id;
+      renderPage();
+      renderErrorList();
+      // 滚动错误列表到对应项
+      const item = document.querySelector(`.error-item[data-id="${id}"]`);
+      if (item) item.scrollIntoView({behavior: "smooth", block: "center"});
+    });
+  });
+  // 若有 active 错误且就在当前页，滚动预览区到该错误位置
+  if (State.activeErrorId) {
+    const activeEl = previewEl.querySelector(`.err-mark[data-err-id="${State.activeErrorId}"]`);
+    if (activeEl) {
+      // setTimeout 等 DOM 渲染完成后再滚动
+      setTimeout(() => activeEl.scrollIntoView({behavior: "smooth", block: "center"}), 0);
+    }
+  }
+  updatePageJumper();
+  // 托管运行时不锁翻页，允许用户自由浏览（与 setBusy 逻辑一致）
+  const navLocked = State.busy && !State.autoPilot.running;
+  $("btn-prev").disabled = navLocked || State.currentPageIdx === 0;
+  $("btn-next").disabled = navLocked || State.currentPageIdx >= State.orderedPnums.length - 1;
+}
+
+// 同步跳页下拉器的选项与当前值
+function updatePageJumper() {
+  const sel = $("page-jumper");
+  if (!State.orderedPnums.length) {
+    sel.innerHTML = `<option>未加载文档</option>`;
+    sel.disabled = true;
+    return;
+  }
+  sel.disabled = State.busy && !State.autoPilot.running;  // 托管中不锁跳页
+  // 仅当选项数变化时重建，避免每次渲染都重置下拉
+  if (sel.childElementCount !== State.orderedPnums.length) {
+    sel.innerHTML = State.orderedPnums.map((pn, i) =>
+      `<option value="${i}">第 ${pn} 页 / ${State.orderedPnums.length}</option>`).join("");
+  }
+  sel.value = String(State.currentPageIdx);
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+function escapeAttr(s) { return escapeHtml(s); }
+
+// ==================== 渲染：错误列表 ====================
+function visibleErrors() {
+  const tab = document.querySelector(".error-tabs button.active").dataset.tab;
+  let list = State.errors.filter(e => {
+    if (tab === "confirmed") return State.accepted[e.id];
+    return e.status !== "ignored" && !State.accepted[e.id];
+  });
+  const f = State.filter;
+  if (f.type) list = list.filter(e => e.error_type === f.type);
+  if (f.confidence) list = list.filter(e => e.confidence === f.confidence);
+  // 仅本页：跟随当前页码，切页时错误列表自动同步
+  if (f.currentPageOnly) {
+    const cur = currentPage();
+    if (cur) list = list.filter(e => e.page_num === cur.page_num);
+    else list = [];
+  }
+  return list;
+}
+
+function renderErrorList() {
+  const list = visibleErrors();
+  const el = $("error-list");
+  if (list.length === 0) {
+    el.innerHTML = `<div class="empty-hint" style="margin-top:60px">无符合条件的错误</div>`;
+    return;
+  }
+  el.innerHTML = list.map(err => {
+    const accepted = !!State.accepted[err.id];
+    const cls = ["error-item"];
+    if (err.confidence === "存疑") cls.push("uncertain");
+    if (accepted) cls.push("accepted");
+    if (State.activeErrorId === err.id) cls.push("active");
+    return `
+      <div class="${cls.join(" ")}" data-id="${err.id}">
+        <div class="row1">
+          <span class="type-tag ${err.error_type}">${err.error_type}</span>
+          <span class="confidence-tag ${err.confidence}">${err.confidence}</span>
+          <span class="page-no">第 ${err.page_num} 页</span>
+        </div>
+        <div>
+          <span class="orig">${escapeHtml(err.original)}</span>
+          <span class="arrow">→</span>
+          <span class="sugg">${escapeHtml(err.suggestion)}</span>
+        </div>
+        <div class="reason">${escapeHtml(err.reason)}</div>
+        <div class="actions">
+          ${accepted
+            ? `<button class="undo" data-act="undo">撤回</button>`
+            : `<button class="accept" data-act="accept">采纳</button>
+               <button class="ignore" data-act="ignore">忽略</button>`}
+        </div>
+      </div>
+    `;
+  }).join("");
+  // 绑定事件
+  el.querySelectorAll(".error-item").forEach(item => {
+    const id = item.dataset.id;
+    item.addEventListener("click", e => {
+      if (e.target.tagName === "BUTTON") return;
+      State.activeErrorId = id;
+      // 跳转到该错误所在页
+      const err = State.errors.find(x => x.id === id);
+      if (err) {
+        const idx = State.orderedPnums.indexOf(err.page_num);
+        if (idx >= 0 && idx !== State.currentPageIdx) {
+          State.currentPageIdx = idx;
+        }
+      }
+      renderPage();
+      renderErrorList();
+    });
+    item.querySelectorAll("button").forEach(btn => {
+      btn.addEventListener("click", e => {
+        e.stopPropagation();
+        const act = btn.dataset.act;
+        if (act === "accept") acceptError(id);
+        else if (act === "ignore") ignoreError(id);
+        else if (act === "undo") undoAccept(id);
+      });
+    });
+  });
+}
+
+function updateCounts() {
+  $("count-unconfirmed").textContent = State.errors.filter(
+    e => e.status !== "ignored" && !State.accepted[e.id]).length;
+  $("count-confirmed").textContent = Object.keys(State.accepted).length;
+  $("btn-export").disabled = State.busy || Object.keys(State.accepted).length === 0;
+}
+
+// ==================== 采纳/忽略/撤回 ====================
+function acceptError(id) {
+  const err = State.errors.find(e => e.id === id);
+  if (!err) return;
+  State.accepted[id] = {
+    page_num: err.page_num,
+    start: err.offset_start,
+    end: err.offset_end,
+    replacement: err.suggestion,
+  };
+  // 原地修改页文本，便于后续纠错/翻页/导出
+  const page = State.pages.find(p => p.page_num === err.page_num);
+  if (page) {
+    page.text = page.text.slice(0, err.offset_start) + err.suggestion + page.text.slice(err.offset_end);
+  }
+  log(`采纳: ${err.original} → ${err.suggestion}（第 ${err.page_num} 页）`, "success");
+  renderPage();
+  renderErrorList();
+  updateCounts();
+  saveSessionToLocal();
+}
+function ignoreError(id) {
+  const err = State.errors.find(e => e.id === id);
+  if (!err) return;
+  err.status = "ignored";
+  log(`忽略: ${err.original}（第 ${err.page_num} 页）`);
+  renderPage();
+  renderErrorList();
+  updateCounts();
+  saveSessionToLocal();
+}
+function undoAccept(id) {
+  const corr = State.accepted[id];
+  const err = State.errors.find(e => e.id === id);
+  if (!corr || !err) return;
+  // 还原页文本：把 suggestion 替回 original
+  const page = State.pages.find(p => p.page_num === corr.page_num);
+  if (page) {
+    const idx = page.text.indexOf(corr.replacement);
+    if (idx >= 0) {
+      page.text = page.text.slice(0, idx) + err.original + page.text.slice(idx + corr.replacement.length);
+    }
+  }
+  delete State.accepted[id];
+  log(`撤回: ${err.original}（第 ${err.page_num} 页）`, "warn");
+  renderPage();
+  renderErrorList();
+  updateCounts();
+  saveSessionToLocal();
+}
+
+// ==================== 纠错 ====================
+async function startProofread() {
+  const ok = await runProofreadOnce();
+  if (!ok && State.autoPilot.running) {
+    // 托管中失败由托管循环处理，不在此弹 toast
+  }
+}
+
+// ==================== 自动托管 ====================
+
+// 采纳指定页所有「明确」错误（静默，不弹 confirm）
+function acceptClearErrorsOnPage(pageNum) {
+  const page = State.pages.find(p => p.page_num === pageNum);
+  if (!page) return 0;
+  const list = State.errors.filter(e =>
+    e.page_num === pageNum
+    && e.confidence === "明确"
+    && !State.accepted[e.id]
+    && e.status !== "ignored"
+  );
+  if (list.length === 0) return 0;
+  // 按偏移倒序应用，避免位置失效
+  const sorted = list.sort((a,b) => b.offset_start - a.offset_start);
+  for (const err of sorted) {
+    page.text = page.text.slice(0, err.offset_start) + err.suggestion + page.text.slice(err.offset_end);
+    State.accepted[err.id] = {
+      page_num: err.page_num, start: err.offset_start,
+      end: err.offset_end, replacement: err.suggestion,
+    };
+  }
+  log(`第 ${pageNum} 页自动采纳 ${list.length} 条明确错误`, "success");
+  // 仅在用户正在浏览此页时刷新预览
+  if (State.orderedPnums[State.currentPageIdx] === pageNum) {
+    renderPage();
+    renderErrorList();
+  }
+  updateCounts();
+  saveSessionToLocal();
+  return list.length;
+}
+
+// 带指数退避的单页纠错；429 重试，其他失败直接返回
+async function runProofreadWithRetry(label, pageNum) {
+  const delays = [1000, 2000, 4000];
+  for (let attempt = 0; attempt <= delays.length; attempt++) {
+    if (State.autoPilot.stopRequested) return false;
+    try {
+      return await runProofreadOnce(pageNum);
+    } catch (e) {
+      if (e.name === "AbortError") return false;
+      if (e.httpStatus === 429 && attempt < delays.length) {
+        log(`${label} 并发受限，${delays[attempt]/1000}s 后重试（第 ${attempt+1}/${delays.length} 次）…`, "warn");
+        await sleep(delays[attempt]);
+        continue;
+      }
+      log(`${label} 纠错失败：${e.message}`, "error");
+      return false;
+    }
+  }
+  return false;
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// 自动托管主循环
+// mode: "accept_clear"（采纳明确） | "check_only"（仅校验）
+async function autoPilotLoop(mode) {
+  const ap = State.autoPilot;
+  ap.running = true;
+  ap.mode = mode;
+  ap.stopRequested = false;
+  setBusy(false);  // 刷新按钮状态为托管中样式
+
+  const startIdx = State.currentPageIdx;
+  const total = State.orderedPnums.length;
+  const modeLabel = mode === "accept_clear" ? "托管·采纳明确" : "托管·仅校验";
+  log(`【${modeLabel}】开始，从第 ${State.orderedPnums[startIdx]} 页到末页（共 ${total - startIdx} 页）`, "info");
+  log(`【${modeLabel}】托管期间可自由翻页浏览、手动采纳，不影响后台进度`, "info");
+
+  let processed = 0;
+  let acceptedTotal = 0;
+  for (let i = startIdx; i < total; i++) {
+    if (ap.stopRequested) { log(`【${modeLabel}】已手动停止`, "warn"); break; }
+    const pn = State.orderedPnums[i];
+    log(`【${modeLabel}】进度 ${i - startIdx + 1}/${total - startIdx}，正在校验第 ${pn} 页…`, "info");
+
+    const ok = await runProofreadWithRetry(`第 ${pn} 页`, pn);
+    if (ap.stopRequested) { log(`【${modeLabel}】已手动停止`, "warn"); break; }
+    if (!ok) { log(`【${modeLabel}】第 ${pn} 页纠错失败，托管中止`, "error"); break; }
+
+    processed++;
+    if (mode === "accept_clear") {
+      acceptedTotal += acceptClearErrorsOnPage(pn);
+    }
+  }
+
+  ap.running = false;
+  ap.mode = null;
+  setBusy(false);  // 恢复按钮状态
+  if (!ap.stopRequested) {
+    log(`【${modeLabel}】完成：校验 ${processed} 页${mode === "accept_clear" ? `，采纳 ${acceptedTotal} 条明确错误` : ""}`, "success");
+    toast(`托管完成：校验 ${processed} 页`, "success");
+  }
+}
+
+function startAutoPilot(mode) {
+  if (!State.session) { toast("请先上传文件", "warn"); return; }
+  if (State.autoPilot.running) { toast("托管已在运行中", "warn"); return; }
+  const remaining = State.orderedPnums.length - State.currentPageIdx;
+  const modeLabel = mode === "accept_clear" ? "采纳所有明确错误（存疑保留）" : "仅校验，不采纳任何错误";
+  if (!confirm(`即将从第 ${State.orderedPnums[State.currentPageIdx]} 页开始托管到末页，共 ${remaining} 页。\n模式：${modeLabel}\n\n托管过程中可随时点击「停止托管」中止。是否开始？`)) return;
+  autoPilotLoop(mode);
+}
+function stopAutoPilot() {
+  if (!State.autoPilot.running) return;
+  State.autoPilot.stopRequested = true;
+  // 取消当前进行中的流式请求
+  if (State.abortController) {
+    try { State.abortController.abort(); } catch (e) {}
+  }
+  log("正在停止托管…", "warn");
+}
+
+// 单页纠错一次；返回 true=成功完成，false=失败或被取消
+// pageNum: 可选，指定要校验的页码；不传则用当前浏览页（手动模式）
+async function runProofreadOnce(pageNum) {
+  if (!State.session) { toast("请先上传文件", "warn"); return false; }
+  // 目标页：优先用传入的 pageNum，否则用当前浏览页
+  const targetPageNum = (pageNum !== undefined) ? pageNum : State.orderedPnums[State.currentPageIdx];
+  const page = State.pages.find(p => p.page_num === targetPageNum);
+  if (!page) return false;
+  // 目标页在 orderedPnums 中的索引，用于取上下文
+  const targetIdx = State.orderedPnums.indexOf(targetPageNum);
+
+  // 清空目标页的旧错误（如有）
+  State.errors = State.errors.filter(e => e.page_num !== page.page_num);
+  setBusy(true);
+  setProgress(0);
+
+  const cfg = State.config || {};
+  const ctxChars = parseInt(cfg.review_context_chars) || 800;
+  let contextPrev = "", contextNext = "";
+  if (targetIdx > 0) {
+    const prev = State.pages.find(p => p.page_num === State.orderedPnums[targetIdx - 1]);
+    if (prev) contextPrev = prev.text.slice(-ctxChars);
+  }
+  if (targetIdx < State.orderedPnums.length - 1) {
+    const next = State.pages.find(p => p.page_num === State.orderedPnums[targetIdx + 1]);
+    if (next) contextNext = next.text.slice(0, ctxChars);
+  }
+
+  const payload = {
+    session_id: State.session.session_id,
+    page_nums: [page.page_num],
+    rules: cfg ? {
+      switches: cfg.rule_switches || {},
+      custom: cfg.custom_rules || [],
+    } : {},
+    review: cfg.enable_review !== false,
+    review_context: ctxChars,
+    token_limit: parseInt(cfg.token_limit) || 1000000,
+    context_prev: contextPrev,
+    context_next: contextNext,
+    ocr_mode: $("chk-ocr").checked,
+  };
+
+  const browsingThisPage = State.orderedPnums[State.currentPageIdx] === page.page_num;
+  log(`开始纠错第 ${page.page_num} 页…`);
+  let total = 0;
+  try {
+    await proofreadStream(payload, (ev) => {
+      if (ev.type === "status") {
+        log(ev.msg);
+      } else if (ev.type === "progress") {
+        total = ev.total;
+        const pct = total > 0 ? (ev.chunk / total * 100) : 0;
+        setProgress(pct);
+        log(`块 ${ev.chunk}/${ev.total}，本次 ${ev.usage.total} tokens，累计 ${ev.total_usage.total} tokens`);
+      } else if (ev.type === "review") {
+        if (ev.rejected || ev.uncertain || ev.excluded) {
+          log(`复核: 块 ${ev.chunk}/${ev.total} 明确 ${ev.confirmed}，存疑 ${ev.uncertain}，疑似误报 ${ev.rejected}，规则排除 ${ev.excluded}`, "warn");
+        }
+      } else if (ev.type === "limit") {
+        log(`token 累计 ${ev.total_usage.total} 超过限额，已熔断`, "warn");
+        if (!State.autoPilot.running) toast("已超过 token 限额，纠错中止", "warn");
+      } else if (ev.type === "error") {
+        log(`纠错失败: ${ev.msg}`, "error");
+        if (!State.autoPilot.running) toast(ev.msg, "error");
+      } else if (ev.type === "done") {
+        const newErrors = ev.errors.map(e => ({...e, status: "unconfirmed"}));
+        State.errors.push(...newErrors);
+        const clear = newErrors.filter(e => e.confidence === "明确").length;
+        const unsure = newErrors.length - clear;
+        log(`第 ${page.page_num} 页纠错完成: 检出 ${newErrors.length} 条错误（明确 ${clear}，存疑 ${unsure}），累计 ${ev.total_usage.total} tokens`, "success");
+        setProgress(100);
+        // 仅在用户正在浏览此页时刷新预览，避免打断用户浏览其他页
+        if (browsingThisPage) {
+          renderPage();
+          renderErrorList();
+        }
+        updateCounts();
+        saveSessionToLocal();
+      }
+    });
+    return true;
+  } catch (e) {
+    if (e.name === "AbortError") { log("纠错已取消", "warn"); }
+    else {
+      log(`纠错失败: ${e.message}`, "error");
+      if (!State.autoPilot.running) toast(e.message, "error");
+    }
+    return false;
+  } finally {
+    setBusy(false);
+    setTimeout(() => setProgress(0), 800);
+  }
+}
+
+// ==================== 翻页 ====================
+function gotoPage(idx) {
+  if (idx < 0 || idx >= State.orderedPnums.length) return;
+  State.currentPageIdx = idx;
+  renderPage();
+  // 切页后错误列表跟随当前页（仅本页模式下自动同步）
+  renderErrorList();
+}
+function nextPage() {
+  // 错误按页码绑定保存于 State.errors，翻页不会丢失，用户随时翻回处理即可
+  gotoPage(State.currentPageIdx + 1);
+  // 翻页后可自动启动下一页纠错（用户也可手动点开始）
+}
+function prevPage() { gotoPage(State.currentPageIdx - 1); }
+
+// ==================== 一键采纳筛选 ====================
+function acceptAllFiltered() {
+  const list = visibleErrors().filter(e => !State.accepted[e.id] && e.status !== "ignored");
+  if (list.length === 0) { toast("当前筛选下没有可采纳的错误", "warn"); return; }
+  if (!confirm(`将采纳当前筛选出的 ${list.length} 条错误，是否继续？`)) return;
+  // 按页+偏移倒序应用，避免位置失效
+  const grouped = {};
+  list.forEach(e => { (grouped[e.page_num] = grouped[e.page_num] || []).push(e); });
+  Object.keys(grouped).forEach(pn => {
+    const page = State.pages.find(p => p.page_num === parseInt(pn));
+    if (!page) return;
+    const sorted = grouped[pn].sort((a,b) => b.offset_start - a.offset_start);
+    for (const err of sorted) {
+      page.text = page.text.slice(0, err.offset_start) + err.suggestion + page.text.slice(err.offset_end);
+      State.accepted[err.id] = {
+        page_num: err.page_num, start: err.offset_start,
+        end: err.offset_end, replacement: err.suggestion,
+      };
+    }
+  });
+  log(`一键采纳 ${list.length} 条错误`, "success");
+  renderPage();
+  renderErrorList();
+  updateCounts();
+  saveSessionToLocal();
+}
+
+// ==================== 导出 ====================
+async function exportFile() {
+  const corrections = Object.values(State.accepted);
+  if (corrections.length === 0) { toast("没有已确认的修改，无需导出", "warn"); return; }
+  setBusy(true);
+  log(`开始导出 ${corrections.length} 条修改…`);
+  try {
+    const resp = await fetch("/api/export", {
+      method: "POST",
+      headers: authHeaders({"Content-Type": "application/json"}),
+      body: JSON.stringify({
+        session_id: State.session.session_id,
+        corrections: corrections.map(c => [c.page_num, c.start, c.end, c.replacement]),
+      }),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({error: resp.statusText}));
+      throw new Error(data.error || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const cd = resp.headers.get("Content-Disposition") || "";
+    let fname = "已修正.docx";
+    const m = cd.match(/filename\*=UTF-8''([^;]+)/) || cd.match(/filename="([^"]+)"/);
+    if (m) fname = decodeURIComponent(m[1]);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = fname;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+    log(`导出成功: ${fname}`, "success");
+    toast(`已导出 ${fname}`, "success");
+  } catch (e) {
+    log(`导出失败: ${e.message}`, "error");
+    toast(e.message, "error");
+  } finally {
+    setBusy(false);
+  }
+}
+
+// ==================== 设置对话框 ====================
+async function openSettings() {
+  const modal = $("settings-modal");
+  modal.classList.add("show");
+  try {
+    const cfg = await loadConfig();
+    // 服务商预设
+    const sel = $("set-provider");
+    sel.innerHTML = cfg.provider_presets.map(p =>
+      `<option value="${p.value}" data-base="${p.base_url}" data-models='${JSON.stringify(p.models)}' data-default="${p.default_model}">${p.name}</option>`
+    ).join("");
+    sel.value = cfg.llm_provider || "deepseek";
+    $("set-llm-key").value = "";
+    $("set-llm-key").placeholder = cfg.llm_configured ? "（已配置，留空保留不变）" : "sk-...";
+    $("set-base-url").value = cfg.llm_base_url || "";
+    $("set-model").value = cfg.llm_model || "";
+    $("set-token-limit").value = cfg.token_limit || 1000000;
+    $("set-review").checked = cfg.enable_review !== false;
+    $("set-review-context").value = cfg.review_context_chars || 800;
+    // 讯飞
+    $("set-xf-appid").value = "";
+    $("set-xf-key").value = "";
+    $("set-xf-secret").value = "";
+    $("set-xf-appid").placeholder = cfg.ocr_configured ? "（已配置，留空保留不变）" : "APPID";
+    // 预置开关
+    const swBox = $("preset-switches");
+    swBox.innerHTML = Object.entries(cfg.preset_switches).map(([k, label]) =>
+      `<div class="checkbox-row"><input type="checkbox" id="sw-${k}" ${cfg.rule_switches[k] ? "checked" : ""}><label for="sw-${k}">${label}</label></div>`
+    ).join("");
+    // 自定义规则
+    $("set-custom-rules").value = (cfg.custom_rules || []).join("\n");
+    // 提示
+    $("llm-key-hint").textContent = cfg.llm_configured ? "✓ 已配置（输入新值将覆盖）" : "未配置";
+    $("xf-hint").textContent = cfg.ocr_configured ? "✓ 已配置（输入新值将覆盖）" : "未配置";
+  } catch (e) {
+    toast("加载配置失败: " + e.message, "error");
+  }
+}
+function closeSettings() { $("settings-modal").classList.remove("show"); }
+
+async function saveSettings() {
+  const cfg = State.config || {};
+  // 非敏感字段
+  const body = {
+    llm_provider: $("set-provider").value,
+    llm_base_url: $("set-base-url").value.trim(),
+    llm_model: $("set-model").value.trim(),
+    token_limit: parseInt($("set-token-limit").value) || 1000000,
+    enable_review: $("set-review").checked,
+    review_context_chars: parseInt($("set-review-context").value) || 800,
+    rule_switches: {},
+    custom_rules: $("set-custom-rules").value.split("\n").map(s => s.trim()).filter(Boolean),
+  };
+  Object.keys(cfg.preset_switches || {}).forEach(k => {
+    body.rule_switches[k] = $("sw-" + k).checked;
+  });
+  try {
+    await apiPost("/api/config", body);
+    // 敏感字段（仅在用户填了新值时才更新）
+    const creds = {};
+    const llmKey = $("set-llm-key").value.trim();
+    if (llmKey) creds.llm_api_key = llmKey;
+    const xfAppid = $("set-xf-appid").value.trim();
+    const xfKey = $("set-xf-key").value.trim();
+    const xfSecret = $("set-xf-secret").value.trim();
+    if (xfAppid) creds.xf_appid = xfAppid;
+    if (xfKey) creds.xf_api_key = xfKey;
+    if (xfSecret) creds.xf_api_secret = xfSecret;
+    if (Object.keys(creds).length > 0) {
+      const resp = await apiPost("/api/credentials", creds);
+      log(`凭据已加密保存到: ${resp.config_path}`, "success");
+    }
+    log("配置已保存", "success");
+    toast("配置已保存", "success");
+    closeSettings();
+    await checkHealth();
+  } catch (e) {
+    toast("保存失败: " + e.message, "error");
+    log(`保存配置失败: ${e.message}`, "error");
+  }
+}
+
+// ==================== 事件绑定 ====================
+function bindEvents() {
+  // 上传按钮：始终可用（file-input 已移到 body 层，不会随 drop-zone 一起被销毁）
+  $("btn-upload").addEventListener("click", () => $("file-input").click());
+  $("file-input").addEventListener("change", e => {
+    if (e.target.files[0]) onFileSelected(e.target.files[0]);
+    e.target.value = "";
+  });
+  // 拖放：初始 drop-zone 与已加载后的整个 preview 区均可拖放新文件
+  const dz = $("drop-zone");
+  if (dz) {
+    dz.addEventListener("click", () => $("file-input").click());
+  }
+  const preview = $("preview");
+  preview.addEventListener("dragover", e => { e.preventDefault(); preview.classList.add("drag-over"); });
+  preview.addEventListener("dragleave", () => preview.classList.remove("drag-over"));
+  preview.addEventListener("drop", e => {
+    e.preventDefault();
+    preview.classList.remove("drag-over");
+    if (e.dataTransfer.files[0]) onFileSelected(e.dataTransfer.files[0]);
+  });
+  // 工具栏
+  $("btn-start").addEventListener("click", startProofread);
+  $("btn-autopilot-accept").addEventListener("click", () => {
+    if (State.autoPilot.running && State.autoPilot.mode === "accept_clear") stopAutoPilot();
+    else if (State.autoPilot.running) { toast("当前已在另一种托管模式中，请先停止", "warn"); }
+    else startAutoPilot("accept_clear");
+  });
+  $("btn-autopilot-check").addEventListener("click", () => {
+    if (State.autoPilot.running && State.autoPilot.mode === "check_only") stopAutoPilot();
+    else if (State.autoPilot.running) { toast("当前已在另一种托管模式中，请先停止", "warn"); }
+    else startAutoPilot("check_only");
+  });
+  $("btn-prev").addEventListener("click", prevPage);
+  $("btn-next").addEventListener("click", nextPage);
+  $("page-jumper").addEventListener("change", e => {
+    const idx = parseInt(e.target.value);
+    if (!isNaN(idx)) gotoPage(idx);
+  });
+  $("btn-export").addEventListener("click", exportFile);
+  $("btn-settings").addEventListener("click", openSettings);
+  $("btn-accept-all").addEventListener("click", acceptAllFiltered);
+  // 设置对话框
+  $("settings-cancel").addEventListener("click", closeSettings);
+  $("settings-save").addEventListener("click", saveSettings);
+  $("set-provider").addEventListener("change", e => {
+    const opt = e.target.selectedOptions[0];
+    $("set-base-url").value = opt.dataset.base || "";
+    const models = JSON.parse(opt.dataset.models || "[]");
+    if (models.length > 0) $("set-model").value = opt.dataset.default || models[0];
+  });
+  // 错误标签切换
+  document.querySelectorAll(".error-tabs button").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.querySelectorAll(".error-tabs button").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      renderErrorList();
+    });
+  });
+  // 过滤器
+  $("filter-type").addEventListener("change", e => { State.filter.type = e.target.value; renderErrorList(); });
+  $("filter-confidence").addEventListener("change", e => { State.filter.confidence = e.target.value; renderErrorList(); });
+  $("filter-current-page").addEventListener("change", e => { State.filter.currentPageOnly = e.target.checked; renderErrorList(); });
+  // 控制台折叠
+  $("btn-toggle-log").addEventListener("click", () => {
+    const logEl = $("log");
+    const btn = $("btn-toggle-log");
+    if (logEl.style.display === "none") {
+      logEl.style.display = "block"; btn.textContent = "控制台 ▲";
+    } else {
+      logEl.style.display = "none"; btn.textContent = "控制台 ▼";
+    }
+  });
+  // 登录 / 登出 / 用户管理
+  $("login-btn").addEventListener("click", doLogin);
+  $("login-toggle-link").addEventListener("click", toggleLoginMode);
+  $("login-username").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); $("login-password").focus(); }
+  });
+  $("login-password").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); doLogin(); }
+  });
+  $("login-password2").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); doLogin(); }
+  });
+  $("user-pill").addEventListener("dblclick", doLogout);
+  $("btn-users").addEventListener("click", openUsersModal);
+  $("users-close").addEventListener("click", () => $("users-modal").classList.remove("show"));
+  $("btn-add-user").addEventListener("click", onAddUser);
+}
+
+// 简单 HTML 转义，防用户管理列表 XSS
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+  })[c]);
+}
+
+// ==================== 登录 / 注册 / 登出 / 用户管理 ====================
+let loginMode = "login";  // "login" | "register"
+
+function setLoginMode(mode) {
+  loginMode = mode;
+  const isReg = mode === "register";
+  $("login-title").textContent = isReg ? "DocProof 注册" : "DocProof 登录";
+  $("login-hint").textContent = isReg
+    ? "注册后将直接登录，无需管理员审批。"
+    : "请输入用户名和密码。没有账号可直接注册。";
+  $("login-password2").classList.toggle("hidden", !isReg);
+  $("login-btn").textContent = isReg ? "注册并登录" : "登录";
+  $("login-toggle-link").textContent = isReg ? "已有账号？去登录" : "没有账号？立即注册";
+  $("login-err").textContent = "";
+  if (isReg) $("login-password2").focus();
+  else $("login-username").focus();
+}
+
+function toggleLoginMode() {
+  setLoginMode(loginMode === "login" ? "register" : "login");
+}
+
+function showLogin() {
+  State.user = null;
+  $("login-overlay").style.display = "flex";
+  $("login-username").value = "";
+  $("login-password").value = "";
+  $("login-password2").value = "";
+  $("login-err").textContent = "";
+  $("user-pill").textContent = "未登录";
+  $("btn-users").classList.add("hidden");
+  setLoginMode("login");
+  setTimeout(() => $("login-username").focus(), 50);
+}
+
+function hideLogin() { $("login-overlay").style.display = "none"; }
+
+async function doLogin() {
+  const username = $("login-username").value.trim();
+  const password = $("login-password").value;
+  if (!username) { $("login-err").textContent = "请输入用户名"; return; }
+  if (!password) { $("login-err").textContent = "请输入密码"; return; }
+  if (loginMode === "register") {
+    if (password.length < 6) { $("login-err").textContent = "密码至少 6 位"; return; }
+    if (password !== $("login-password2").value) { $("login-err").textContent = "两次输入的密码不一致"; return; }
+    $("login-err").textContent = "";
+    try {
+      const resp = await fetch("/api/register", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({username, password}),
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        $("login-err").textContent = data.error || `注册失败 HTTP ${resp.status}`;
+        return;
+      }
+      // 服务端返回 {session_token, user}（已自动登录）
+      localStorage.setItem(TOKEN_KEY, data.session_token);
+      State.user = data.user;
+      onLoginSuccess(data.user);
+      log(`注册成功: ${data.user.display_name || data.user.username}`, "success");
+      return;
+    } catch (e) {
+      $("login-err").textContent = "网络错误: " + e.message;
+      return;
+    }
+  }
+  $("login-err").textContent = "";
+  try {
+    const resp = await fetch("/api/login", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({username, password}),
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({error: resp.statusText}));
+      $("login-err").textContent = data.error || `登录失败 HTTP ${resp.status}`;
+      return;
+    }
+    const data = await resp.json();
+    // 服务端返回 {session_token, user}
+    localStorage.setItem(TOKEN_KEY, data.session_token);
+    State.user = data.user;
+    onLoginSuccess(data.user);
+  } catch (e) {
+    $("login-err").textContent = "网络错误: " + e.message;
+  }
+}
+
+function onLoginSuccess(user) {
+  hideLogin();
+  const name = user.display_name || user.username || "";
+  $("user-pill").textContent = `${name}${user.is_admin ? "（管理员）" : ""}`;
+  if (user.is_admin) $("btn-users").classList.remove("hidden");
+  log(`已登录: ${name}${user.is_admin ? "（管理员）" : ""}`, "success");
+  // 登录后才拉配置、恢复会话
+  checkHealth();
+  loadConfig().catch(() => {});
+  restoreSessionFromLocal();
+}
+
+async function doLogout() {
+  const token = getToken();
+  // 通知服务端删除会话（即使失败也清本地状态）
+  if (token) {
+    try {
+      await fetch("/api/logout", {
+        method: "POST",
+        headers: {"Content-Type": "application/json", ...authHeaders()},
+      });
+    } catch (e) { /* 忽略：本地仍要登出 */ }
+  }
+  localStorage.removeItem(TOKEN_KEY);
+  State.user = null;
+  clearSessionLocal();
+  // 清掉界面状态
+  State.session = null;
+  State.pages = [];
+  State.errors = [];
+  State.accepted = {};
+  renderPage();
+  renderErrorList();
+  updateCounts();
+  showLogin();
+  log("已退出登录");
+}
+
+// 通过本地存的 token 自动登录（页面刷新后）
+async function tryAutoLogin() {
+  const token = getToken();
+  if (!token) { showLogin(); return; }
+  try {
+    const resp = await fetch("/api/me", {headers: authHeaders()});
+    if (resp.ok) {
+      const user = await resp.json();
+      State.user = user;
+      onLoginSuccess(user);
+      return;
+    }
+    // token 失效
+    localStorage.removeItem(TOKEN_KEY);
+  } catch (e) { /* 网络错误，继续显示登录 */ }
+  showLogin();
+}
+
+// ---------- 用户管理对话框（管理员） ----------
+async function openUsersModal() {
+  if (!State.user || !State.user.is_admin) return;
+  $("users-modal").classList.add("show");
+  await refreshUserList();
+}
+
+async function refreshUserList() {
+  try {
+    const data = await apiGet("/api/users");
+    const list = $("user-list");
+    list.innerHTML = "";
+    if (!data.users || data.users.length === 0) {
+      list.innerHTML = '<div style="color:#9ca3af;padding:12px">暂无用户</div>';
+      return;
+    }
+    for (const u of data.users) {
+      const row = document.createElement("div");
+      row.className = "user-row";
+      const uname = u.username || "";
+      const isSelf = State.user && uname === (State.user.username || State.user.display_name);
+      row.innerHTML = `
+        <span class="name">${escapeHtml(uname)}${isSelf ? ' <span style="color:#9ca3af;font-size:11px">（你）</span>' : ''}</span>
+        ${u.is_admin ? '<span class="badge admin">管理员</span>' : '<span class="badge">普通</span>'}
+        <button data-action="rename" data-id="${encodeURIComponent(uname)}">改名</button>
+        <button data-action="admin" data-id="${encodeURIComponent(uname)}">${u.is_admin ? '取消管理员' : '设为管理员'}</button>
+        <button data-action="password" data-id="${encodeURIComponent(uname)}">重置密码</button>
+        <button data-action="delete" data-id="${encodeURIComponent(uname)}" class="danger"${isSelf ? ' disabled title="不能删除自己"' : ''}>删除</button>
+      `;
+      list.appendChild(row);
+    }
+    // 绑定按钮事件
+    list.querySelectorAll("button[data-action]").forEach(btn => {
+      btn.addEventListener("click", () => onUserAction(
+        btn.dataset.action, decodeURIComponent(btn.dataset.id), btn));
+    });
+  } catch (e) {
+    toast("加载用户列表失败: " + e.message, "error");
+  }
+}
+
+async function onUserAction(action, username, btn) {
+  if (action === "delete") {
+    if (!confirm(`确定删除用户「${username}」？其所有会话立即失效，已上传的纠错会话仍保留至 TTL 过期。`)) return;
+    try {
+      await apiDelete(`/api/users/${encodeURIComponent(username)}`);
+      toast("已删除", "success");
+      await refreshUserList();
+    } catch (e) { toast(e.message, "error"); }
+    return;
+  }
+  if (action === "rename") {
+    const newName = prompt("输入新的用户名：", username);
+    if (!newName || newName === username) return;
+    try {
+      const resp = await apiPost(`/api/users/${encodeURIComponent(username)}/rename`, {username: newName});
+      toast(`已改名：${resp.username}`, "success");
+      // 如果改的是自己，更新本地 State
+      if (State.user && State.user.username === username) {
+        State.user.username = resp.username;
+        State.user.display_name = resp.username;
+        const name = resp.username;
+        $("user-pill").textContent = `${name}${State.user.is_admin ? "（管理员）" : ""}`;
+      }
+      await refreshUserList();
+    } catch (e) { toast(e.message, "error"); }
+    return;
+  }
+  if (action === "admin") {
+    const cur = btn.textContent.includes("取消");
+    try {
+      await apiPost(`/api/users/${encodeURIComponent(username)}/admin`, {is_admin: !cur});
+      toast("已更新", "success");
+      await refreshUserList();
+    } catch (e) { toast(e.message, "error"); }
+    return;
+  }
+  if (action === "password") {
+    const newPwd = prompt(`为用户「${username}」设置新密码（至少 6 位）：`);
+    if (!newPwd) return;
+    if (newPwd.length < 6) { toast("密码至少 6 位", "warn"); return; }
+    if (!confirm(`确认将用户「${username}」的密码重置为新输入的密码？\n该用户的所有现有会话将立即失效。`)) return;
+    try {
+      await apiPost(`/api/users/${encodeURIComponent(username)}/password`, {password: newPwd});
+      toast("密码已重置", "success");
+      await refreshUserList();
+    } catch (e) { toast(e.message, "error"); }
+  }
+}
+
+async function onAddUser() {
+  const username = $("new-user-name").value.trim();
+  const password = $("new-user-pwd").value;
+  if (!username) { toast("请输入用户名", "warn"); return; }
+  if (password.length < 6) { toast("密码至少 6 位", "warn"); return; }
+  const isAdmin = $("new-user-admin").checked;
+  try {
+    await apiPost("/api/users", {username, password, is_admin: isAdmin});
+    $("new-user-name").value = "";
+    $("new-user-pwd").value = "";
+    $("new-user-admin").checked = false;
+    toast(`用户「${username}」已创建`, "success");
+    await refreshUserList();
+  } catch (e) { toast(e.message, "error"); }
+}
+
+// ==================== 初始化 ====================
+async function init() {
+  bindEvents();
+  // 先尝试用 localStorage 里的 token 自动登录；失败则显示登录遮罩
+  await tryAutoLogin();
+  // 不再直接 checkHealth/loadConfig/restoreSession——这些移到 onLoginSuccess 中
+}
+init();
+</script>
+</body>
+</html>
