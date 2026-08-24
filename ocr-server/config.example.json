@@ -23,7 +23,7 @@
     "use_table_recognition": false
   },
   "render_dpi": 200,
-  "max_concurrent": 5,
+  "max_concurrent": 3,
   "port": 8022,
   "mode": "paddle",
   "xf": {
