@@ -32,12 +32,18 @@ def _user_config_dir() -> str:
 
 
 # 用户数据目录：存放 _users.json / _sessions.json。
-# 优先用环境变量 DOCPROOF_USER_DATA_DIR 覆盖；默认与全局配置同目录下的 users 子目录。
-# （旧版本默认复用 biaoshifu 目录的账号体系，如需保持可设置 DOCPROOF_USER_DATA_DIR 指回。）
-USER_DATA_DIR = os.environ.get(
-    "DOCPROOF_USER_DATA_DIR",
-    os.path.join(_user_config_dir(), "users"),
-)
+# 优先用环境变量 DOCPROOF_USER_DATA_DIR 覆盖。
+# 默认复用 ~/biaoshifu 的账号体系：两边的 _users.json/_sessions.json 结构与
+# PBKDF2 哈希完全一致（见 users._hash_password），跨进程 .lock 也同名互斥，可直接共用；
+# 该目录不存在时退回独立目录（全局配置同目录下的 users 子目录）。
+def _default_user_data_dir() -> str:
+    legacy = os.path.join(os.path.expanduser("~"), "biaoshifu")
+    if os.path.isdir(legacy):
+        return legacy
+    return os.path.join(_user_config_dir(), "users")
+
+
+USER_DATA_DIR = os.environ.get("DOCPROOF_USER_DATA_DIR", _default_user_data_dir())
 
 
 # 打包后（PyInstaller frozen）：仍用 _APP_DIR 找旧版明文 config.json 做一次性迁移

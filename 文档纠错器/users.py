@@ -31,8 +31,10 @@ from datetime import datetime
 import config
 
 # 用户数据（_users.json / _sessions.json）存放在 config.USER_DATA_DIR 下：
-# 默认 %APPDATA%\DocProof\users（可用环境变量 DOCPROOF_USER_DATA_DIR 覆盖）。
-# 配置文件（_server_config.json）仍在 _user_config_dir() 下，互不干扰。
+# 默认取当前用户主目录下的 biaoshifu（~/biaoshifu，Windows 即 C:\Users\<当前用户>\biaoshifu）；
+# 若该目录不存在则退回 %APPDATA%\DocProof\users（读写时自动创建）。
+# 可用环境变量 DOCPROOF_USER_DATA_DIR 强制指定。配置文件（_server_config.json）仍在
+# _user_config_dir() 下，互不干扰。
 USERS_PATH = os.path.join(config.USER_DATA_DIR, "_users.json")
 SESSIONS_PATH = os.path.join(config.USER_DATA_DIR, "_sessions.json")
 
@@ -81,6 +83,8 @@ def _acquire_file_lock(lock_path: str):
     锁文件缺失时以追加方式创建（绝不截断，避免并发创建互相破坏已锁状态）。
     等待超时抛出 TimeoutError。
     """
+    # 首次启动时数据目录（如 %APPDATA%\DocProof\users）可能尚未创建
+    os.makedirs(os.path.dirname(lock_path), exist_ok=True)
     # "a+b" 追加+二进制：文件不存在则创建，存在则原样打开，不截断内容
     f = open(lock_path, "a+b")
     try:

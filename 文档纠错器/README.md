@@ -140,7 +140,7 @@ DocProof 服务器已启动（多用户隔离版 v1.3）
   浏览器访问:  http://127.0.0.1:8000/
   健康检查:    http://127.0.0.1:8000/api/health
   全局配置:    C:\Users\<你>\AppData\Roaming\DocProof\_server_config.json
-  用户数据:    C:\Users\<你>\AppData\Roaming\DocProof\_users.json
+  用户数据:    C:\Users\<你>\biaoshifu\_users.json
   敏感字段:    DPAPI 加密（绑定当前 Windows 用户）
 
   ⚠ 首次启动：已自动创建管理员账户
@@ -152,7 +152,8 @@ DocProof 服务器已启动（多用户隔离版 v1.3）
 ```
 
 > 首次启动的控制台 token **只显示一次**，关闭窗口前务必保存。若丢失，删除
-> `%APPDATA%\DocProof\_users.json` 后重启服务端即可重新走「首启创建管理员」流程
+> `~\biaoshifu\_users.json`（无该目录时在 `%APPDATA%\DocProof\users\_users.json`）后
+> 重启服务端即可重新走「首启创建管理员」流程
 > （会丢失已建的其他用户，需重建）。
 
 > 默认监听 `127.0.0.1`（仅本机访问）。如需局域网其他设备访问，加 `--host 0.0.0.0`，
@@ -281,7 +282,8 @@ v1.3 起引入多用户体系。设计目标：单端口承载多用户，会话
 
 - 首启无任何用户时自动创建管理员（user_id 固定为 `admin`），token 原文仅在控制台
   显示一次，磁盘上只存 SHA-256 hash，无法事后读取。
-- **token 丢失恢复**：删除 `%APPDATA%\DocProof\_users.json` 后重启服务端，会重新走
+- **token 丢失恢复**：删除用户数据文件 `_users.json`（默认 `~\biaoshifu\_users.json`）
+  后重启服务端，会重新走
   首启流程创建管理员（会丢失已建的其他用户，需重建）。
 - 删除用户的接口会拒绝「删掉最后一个管理员」，避免锁死。
 - 管理员可重置任意用户 token（旧 token 立即失效）、切换管理员状态、重命名、删除。
@@ -431,8 +433,9 @@ docproof_server/
 └── 1.ico                   # 图标
 ```
 
-> 配置与用户数据均不在项目目录，而在 `%APPDATA%\DocProof\` 下：
-> `_server_config.json`（全局配置）与 `_users.json`（用户表），避免误打包。
+> 配置与用户数据均不在项目目录，避免误打包：全局配置在 `%APPDATA%\DocProof\` 下
+> （`_server_config.json`）；用户数据默认在 `~\biaoshifu\` 下（`_users.json` /
+> `_sessions.json`），该目录不存在时自动改用 `%APPDATA%\DocProof\users\`。
 
 ## 打包
 

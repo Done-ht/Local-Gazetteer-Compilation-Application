@@ -4,6 +4,9 @@ __pycache__/
 .venv/
 myenv/
 
+# 本地数据（含真实凭据，禁止上传）
+biaoshifu/
+
 # 构建产物
 build/
 dist/
