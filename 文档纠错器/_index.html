@@ -148,10 +148,20 @@
   .error-item .orig { color: #b91c1c; text-decoration: line-through; font-weight: 500; }
   .error-item .arrow { color: #9ca3af; margin: 0 4px; }
   .error-item .sugg { color: #15803d; font-weight: 500; }
-  .error-item .reason {
-    color: #6b7280; font-size: 12px; line-height: 1.5; margin-top: 4px;
-    word-break: break-all;
+  .error-item .reason-row {
+    display: flex; align-items: flex-start; gap: 6px; margin-top: 4px;
   }
+  .error-item .reason {
+    flex: 1; color: #6b7280; font-size: 12px; line-height: 1.5;
+    word-break: break-all; user-select: text; cursor: text;
+  }
+  .error-item .copy-reason {
+    flex-shrink: 0; background: #fff; border: 1px solid #d1d5db;
+    color: #6b7280; font-size: 11px; padding: 1px 6px; border-radius: 3px;
+    cursor: pointer; line-height: 1.6; white-space: nowrap;
+  }
+  .error-item .copy-reason:hover { background: #f3f4f6; }
+  .error-item .copy-reason.copied { color: #15803d; border-color: #16a34a; background: #f0fdf4; }
   .error-item .actions {
     display: flex; gap: 6px; margin-top: 6px;
   }
@@ -960,7 +970,10 @@ function renderErrorList() {
           <span class="arrow">→</span>
           <span class="sugg">${escapeHtml(err.suggestion)}</span>
         </div>
-        <div class="reason">${escapeHtml(err.reason)}</div>
+        <div class="reason-row">
+          <div class="reason">${escapeHtml(err.reason)}</div>
+          <button class="copy-reason" data-act="copy-reason" title="复制理由">复制</button>
+        </div>
         <div class="actions">
           ${accepted
             ? `<button class="undo" data-act="undo">撤回</button>`
@@ -994,6 +1007,7 @@ function renderErrorList() {
         if (act === "accept") acceptError(id);
         else if (act === "ignore") ignoreError(id);
         else if (act === "undo") undoAccept(id);
+        else if (act === "copy-reason") copyReason(btn, id);
       });
     });
   });
@@ -1004,6 +1018,39 @@ function updateCounts() {
     e => e.status !== "ignored" && !State.accepted[e.id]).length;
   $("count-confirmed").textContent = Object.keys(State.accepted).length;
   $("btn-export").disabled = State.busy || Object.keys(State.accepted).length === 0;
+}
+
+// ==================== 复制理由 ====================
+function copyReason(btn, id) {
+  const err = State.errors.find(e => e.id === id);
+  if (!err || !err.reason) return;
+  const text = `【${err.error_type}】${err.original} → ${err.suggestion}\n${err.reason}`;
+  const done = () => {
+    btn.textContent = "已复制";
+    btn.classList.add("copied");
+    setTimeout(() => { btn.textContent = "复制"; btn.classList.remove("copied"); }, 1500);
+  };
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(done).catch(() => fallbackCopy(text, done));
+  } else {
+    fallbackCopy(text, done);
+  }
+}
+
+function fallbackCopy(text, done) {
+  const ta = document.createElement("textarea");
+  ta.value = text;
+  ta.style.position = "fixed";
+  ta.style.opacity = "0";
+  document.body.appendChild(ta);
+  ta.select();
+  try {
+    document.execCommand("copy");
+    done();
+  } catch (e) {
+    log("复制失败，请手动选中理由文本复制", "error");
+  }
+  document.body.removeChild(ta);
 }
 
 // ==================== 采纳/忽略/撤回 ====================
